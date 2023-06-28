@@ -91,8 +91,6 @@ class SukajanConfig:
             logging.error(f'File "{path}" not found or there was an error. Description: {tmp_e}.')
             if reset:
                 logging.info('Use default configuration instead.')
-            else:
-                logging.info('Do nothing.')
 
             # Load default config if requested.
             if reset:

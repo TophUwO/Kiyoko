@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 # Misc
 srcproj/conf/
+srcproj/env/
