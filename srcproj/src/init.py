@@ -14,7 +14,6 @@
 
 # imports
 import json
-import jsonschema
 import discord
 import logging
 import datetime
