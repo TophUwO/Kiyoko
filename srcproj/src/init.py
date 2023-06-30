@@ -13,151 +13,73 @@
 # and constants.
 
 # imports
-import json
-import discord
+import dotenv
 import logging
-import datetime
-
-
-# JSON config file output name template
-sj_outfiletempl = 'backups/cfgbackup_{}_{}-{}-{}_{}{}{}.json'
 
 
 # This class holds all configuration options the bot supports alongside
 # bot-wide constants.
-class SukajanConfig:
-    # constants and default settings
-    sj_const_defbotname    = 'SukajanBot'
-    sj_const_definitfile   = 'conf/init.json'
-    sj_const_defstatus     = discord.Status.online
-    sj_const_defautoreconn = True
-    sj_const_defprefix     = '/'
-    sj_const_defavatar     = 'conf/avatars/def.png'
+class SukajanConfig(object):
+    def __init__(self):
+        self._object = {}
 
-    # Initializes the configuration class, providing a file used
-    # to read settings.
+        # Load config file.
+        if not self.readconfig():
+            raise Exception(f'Failed to read config file ".env".')
+
+
+    # Retrieves a value from the internal settings object. If the key
+    # does not exist, return '*fallback*.
     #
-    # Returns nothing.
-    def __init__(self, initfile: str = ''):
-        # settings variables
-        self.conf_botname       = None
-        self.conf_status        = None
-        self.conf_autoreconnect = None
-        self.conf_prefix        = None
-        self.conf_token         = None
-        self.conf_avatar        = None
+    # Returns value associated with *key*, otherwise *fallback*.
+    def getvalue(self, key: str, fallback: any) -> any:
+        return self._object.get(key, fallback)
 
-        # Attempt to load the config.
-        self.loadconfig(path=initfile, reset=True)
-
-
-    # Loads a configuration file and updates all found configuration
-    # found within it. The format of the config file is JSON.
-    # If the specified file does not exist or is invalid, the function
-    # resets the configuration to default values.
+    
+    # Updates the configuration of the given *key* with *value*.
+    # If the key does not exist, create a new one. If the key did
+    # not exist previously, the function returns None.
     #
-    # Return values:
-    #     0 - reset config to default
-    #     1 - update config successfully
-    #     2 - error (IO, JSON decoding, etc.)
-    #     3 - no action was performed
-    def loadconfig(self, path: str, reset: bool = False) -> int:
-        # Fix the path in case it is an empty file path.
-        path = path if path.__len__() > 0 else SC.sj_const_definitfile
+    # Returns old value.
+    def setvalue(self, key: str, value: any) -> any:
+        # Get old value.
+        oldval = self._object.get(key, None)
 
-        # Attempt to open the config file. If that fails, try
-        # the fallback route by loading default settings if
-        # requested, otherwise do nothing.
-        try:
-            logging.info(f'Attempt loading config file "{path}".')
-
-            with open(path, 'r') as tmp_file:
-                # Validate JSON config file.
-                tmp_json = json.load(tmp_file)
-
-                # Read properties and set config values accordingly.
-                logging.info(f'JSON config file \"{path}\" valid. Updating configuration.')
-
-                self.conf_prefix        = tmp_json['prefix']
-                self.conf_autoreconnect = bool(tmp_json['reconnect'])
-                self.conf_botname       = tmp_json['alias']
-                self.conf_status        = tmp_json['status']
-                self.conf_token         = tmp_json['token']
-                self.conf_avatar        = tmp_json['avatar']
-
-                return 1
-        except Exception as tmp_e:
-            logging.error(f'File "{path}" not found or there was an error. Description: {tmp_e}.')
-            if reset:
-                logging.info('Use default configuration instead.')
-
-            # Load default config if requested.
-            if reset:
-                self.loaddefconfig()
-            return 0 if reset else 3
+        # Update value.
+        self._object[key] = value
+        return oldval
 
 
-
-    # Loads the default configuration of the bot.
-    #
-    # Returns nothing.
-    def loaddefconfig(self) -> None:
-        self.conf_botname       = SC.sj_const_defbotname
-        self.conf_autoreconnect = SC.sj_const_defautoreconn
-        self.conf_prefix        = SC.sj_const_defprefix
-        self.conf_status        = SC.sj_const_defstatus
-
-        # Send confirmation log message.
-        logging.info('Default configuration has been loaded.')
-
-
-    # Writes the configuration to the file specified.
-    # If the file already exists, it will be overwritten.
-    #
+    # Reads the config file specified by *fname*.
+    # The internal settings object is updated.
+    # 
     # Returns True on success, False on failure.
-    def writeconfig(self, user: discord.User = None) -> bool:
-        # Get current date and time.
-        tmp_dt = datetime.datetime.now()
-
-        # Format file name.
-        fname_formatted = SC.sj_const_definitfile if user == None else sj_outfiletempl.format(
-            user.name,
-            tmp_dt.month,
-            tmp_dt.day,
-            tmp_dt.year,
-            tmp_dt.hour,
-            tmp_dt.minute,
-            tmp_dt.second
-        )
-
-        # Create and populate JSON object, representing current
-        # settings.
-        tmp_jsonobj = json.loads(f'''
-            {{
-                "alias":     "{self.conf_botname}",
-                "token":     "{self.conf_token}",
-                "reconnect":  {int(self.conf_autoreconnect)},
-                "status":    "{self.conf_status}",
-                "prefix":    "{self.conf_prefix}"
-            }}
-        ''')
-
-        # Open and write file.
+    def readconfig(self, fname: str = '.env') -> bool:
         try:
-            with open(fname_formatted, 'w') as tmp_outfile:
-                # Write the created JSON object to the file.
-                tmp_outfile.write(json.dumps(obj=tmp_jsonobj, indent=4))
-
-                logging.info(f'Successfully wrote configuration file [fname="{fname_formatted}"].')
-                return True
+            self._object = dotenv.dotenv_values(fname)
         except Exception as tmp_e:
-            logging.error(f'Could not write configuration file. Description: {tmp_e}.')
+            logging.critical(f'Failed to read "{fname}" configuration file. Desc: {tmp_e}')
 
             return False
 
+        # Everything went well.
+        return True
 
 
-# Make shorter alias for readability purposes.
-SC = SukajanConfig
+    # Writes the current configuration to the ".env" file.
+    #
+    # Returns True on success, False on failure.
+    def writeconfig(self, fname: str = '.env') -> bool:
+        try:
+            with open(fname, 'w') as tmp_file:
+                for key, value in self._object.items():
+                    tmp_file.write(f'{key} = {value}\n')
+        except Exception as tmp_e:
+            logging.error(f'Failed to write to configuration file "{fname}". Desc: {tmp_e}')
+
+            return False
+
+        # Everything went well.
+        return True
 
 

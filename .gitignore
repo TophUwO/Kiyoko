@@ -363,5 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # Misc
-srcproj/conf/
+srcproj/avatars/
 srcproj/env/
+*.env
