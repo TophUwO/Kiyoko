@@ -34,7 +34,7 @@ class SukajanDatabase(object):
             try:
                 self.__createdb(path, cfg)
             except Exception as tmp_e:
-                logging.critical(f'Could not create database infrastructure {path}. Desc: {tmp_e}.')
+                logging.critical(f'Could not create database infrastructure {path}. Desc: {tmp_e}')
 
                 # Reraise the exception so that the client class can
                 # abort the application.
@@ -49,7 +49,7 @@ class SukajanDatabase(object):
         self._cur = self._conn.cursor()
 
         # Everything was successful.
-        logging.info(f'Successfully established connection to database "{path}". SQLite3 version: {sqlite3.version}.')
+        logging.info(f'Successfully established connection to database "{path}". SQLite3 version: {sqlite3.version}')
 
 
     def __del__(self):
@@ -86,7 +86,7 @@ class SukajanDatabase(object):
 
            return None if mode == 0 else tmp_res
         except Exception as tmp_e:
-            logging.error(f'Failed to execute SQL command "{cmd}". Desc: {tmp_e}.')
+            logging.error(f'Failed to execute SQL command "{cmd}". Desc: {tmp_e}')
 
         return None
 
@@ -152,7 +152,6 @@ class SukajanDatabase(object):
                 guildid VARCHAR(256) NOT NULL,
                 prefix VARCHAR(10) DEFAULT '{cfg.getvalue('prefix')}',
                 alias VARCHAR(256) DEFAULT '{cfg.getvalue('alias')}',
-                avatar TEXT,
                 logchan VARCHAR(256),
 
                 PRIMARY KEY(guildid)

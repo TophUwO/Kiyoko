@@ -96,11 +96,10 @@ class SukajanGuildConfig(object):
         if settings is None:
             raise Exception('Invalid "settings" tuple.')
 
-        # settings are provided in this order: (guildid, prefix, alias, avatar, logchan)
+        # Settings are provided in this order: (guildid, prefix, alias, logchan).
         self.id      = settings[0]
         self.pre     = settings[1]
         self.alias   = settings[2]
-        self.avatar  = settings[3]
-        self.logchan = settings[4]
+        self.logchan = settings[3]
 
 
