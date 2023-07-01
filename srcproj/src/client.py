@@ -16,20 +16,43 @@ import logging
 import discord
 import os
 import math
+import time
+
 import config as sj_cfg
 import db as sj_db
+
+
+# Generates the log file name for the current session.
+#
+# Returns file name string (without extention).
+def genlogfname() -> str:
+    # Format message.
+    return time.strftime(f'log_%m-%d-%Y_%H-%M-%S')
+
+
+# Sets up the logging facility.
+#
+# Returns nothing.
+def setuplogging(dir: str) -> None:
+    if dir is None:
+        raise Exception('Invalid logging directory.')
+
+    # Create 'log' directory if it does not exist.
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    
+    # Set up basic logging configuration.
+    logfmt = '[%(levelname)s] %(module)s: %(message)s'
+    log_handlers = [
+        logging.FileHandler('./' + dir + '/' + genlogfname() + '.log', 'w', 'utf-8'),
+        logging.StreamHandler()
+    ]
+    logging.basicConfig(level=logging.DEBUG, handlers=log_handlers, format=logfmt)
 
 
 # This class reimplements certain aspects of the event handlers, etc.
 class SukajanClient(discord.Client):
     def __init__(self):
-        # Let discord.py do its default initialization.
-        super().__init__(intents=discord.Intents.all())
-        self._gcfg = dict()
-
-        # Setup logging.
-        logging.root.setLevel(logging.NOTSET)
-        
         # Load configuration file.
         try:
             self._cfg = sj_cfg.SukajanConfig()
@@ -40,6 +63,18 @@ class SukajanClient(discord.Client):
             logging.critical(f'Failed to load configuration settings. Desc: {tmp_e}')
 
             os.abort()
+
+        # Setup logging.
+        try:
+            setuplogging(self._cfg.getvalue('logdir'))
+        except Exception as tmp_e:
+            logging.critical(f'Failed to initialize logging facility. Desc: {tmp_e}')
+
+            os.abort()
+
+        # Let discord.py do its default initialization.
+        super().__init__(intents=discord.Intents.all())
+        self._gcfg = dict()
 
         # Establish database connection.
         dbpath = self._cfg.getvalue('db')
