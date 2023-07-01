@@ -365,4 +365,5 @@ FodyWeavers.xsd
 # Misc
 srcproj/avatars/
 srcproj/env/
+srcproj/db/
 *.env

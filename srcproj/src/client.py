@@ -15,6 +15,7 @@
 import logging
 import discord
 import os
+import math
 import config as sj_cfg
 import db as sj_db
 
@@ -60,15 +61,15 @@ class SukajanClient(discord.Client):
     async def on_ready(self) -> None:
         # Fetch guild settings for all guilds he bot is connected to.
         for guild in self.guilds:
-            tmp_res = self._db.execquery(f'SELECT * from guildconfig WHERE guildid = \'{guild.id}\'', 1)
+            tmp_ginfo = self._db.execquery(f'SELECT * from guildconfig WHERE guildid = \'{guild.id}\'', 1)
 
             # Generate guild config object and put it into the dictionary.
             try:
-                self._gcfg[guild.id] = sj_cfg.SukajanGuildConfig(tmp_res)
+                self._gcfg[guild.id] = sj_cfg.SukajanGuildConfig(tmp_ginfo)
 
                 logging.info(f'Successfully loaded configuration for guild "{guild.name}" (id: {guild.id})')
             except Exception as tmp_e:
-                logging.error(f'Could not load configuration for guild {guild.name} (id: {guild.id}).')
+                logging.error(f'Could not load configuration for guild {guild.name} (id: {guild.id}). Desc: {tmp_e}.')
 
         # We are done setting things up and are now ready.
         logging.info(f'SukajanBot is now available as "{self.user}". Ready.')
@@ -81,10 +82,17 @@ class SukajanClient(discord.Client):
     #
     # Returns nothing.
     async def on_guild_join(self, guild: discord.Guild) -> None:
+        # Convert 'created_at' time to UNIX timestamp (epoch).
+        tmp_ts = math.floor(guild.created_at.timestamp())
+
         # Add guild info to the bots database.
-        self._db.execcommand(f'INSERT INTO guilds VALUES({guild.id}, {guild.owner_id}, -1)')
+        self._db.execcommand(f'INSERT INTO guilds VALUES({guild.id}, {guild.owner_id}, {tmp_ts})')
         self._db.execcommand(f'INSERT INTO guildconfig (guildid) VALUES({guild.id})')
         self._db.flush()
+
+        # Add guild info to dict.
+        tmp_ginfo = self._db.execquery(f'SELECT * FROM guildconfig WHERE guildid = \'{guild.id}\'')
+        self._gcfg[guild.id] = sj_cfg.SukajanGuildConfig(tmp_ginfo)
 
         msg = 'Created and joined' if guild.owner_id == self.user.id else 'Joined'
         logging.info(f'{msg} guild "{guild.name}" (id: {guild.id}).')
@@ -102,6 +110,9 @@ class SukajanClient(discord.Client):
         self._db.execcommand(f'DELETE FROM guilds where id={guild.id}')
         self._db.execcommand(f'DELETE FROM guildconfig WHERE guildid={guild.id}')
         self._db.flush()
+
+        # Remove guild info from dict.
+        self._gcfg.pop(guild.id)
 
         logging.info(f'Left guild "{guild.name}" (id: {guild.id}).')
 
