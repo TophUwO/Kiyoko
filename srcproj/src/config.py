@@ -24,8 +24,7 @@ class SukajanConfig(object):
         self._object = dict()
 
         # Load config file.
-        if not self.readconfig():
-            raise Exception(f'Failed to read config file ".env".')
+        self.readconfig()
 
 
     def __del__(self):
@@ -58,17 +57,9 @@ class SukajanConfig(object):
     # Reads the config file specified by *fname*.
     # The internal settings object is updated.
     # 
-    # Returns True on success, False on failure.
-    def readconfig(self, fname: str = '.env') -> bool:
-        try:
-            self._object = dotenv.dotenv_values(fname)
-        except Exception as tmp_e:
-            logging.critical(f'Failed to read "{fname}" configuration file. Desc: {tmp_e}')
-
-            return False
-
-        # Everything went well.
-        return True
+    # Returns nothing.
+    def readconfig(self, fname: str = '.env') -> None:
+        self._object = dotenv.dotenv_values(fname)
 
 
     # Writes the current configuration to the ".env" file.

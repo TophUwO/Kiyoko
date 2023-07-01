@@ -31,22 +31,13 @@ class SukajanDatabase(object):
         if not dbexists:
             logging.warning(f'Database "{path}" does not exist. Creating it ...')
 
-            try:
-                self.__createdb(path, cfg)
-            except Exception as tmp_e:
-                logging.critical(f'Could not create database infrastructure {path}. Desc: {tmp_e}')
-
-                # Reraise the exception so that the client class can
-                # abort the application.
-                raise
+            self.__createdb(path, cfg)
         else:
             logging.info(f'Found database file: "{path}".')
 
         # Establish connection. If this fails, an exception will be raised.
         self._conn = sqlite3.connect(path)
-        if self._conn is None:
-            raise Exception(f'Failed to connect to database "{path}".')
-        self._cur = self._conn.cursor()
+        self._cur  = self._conn.cursor()
 
         # Everything was successful.
         logging.info(f'Successfully established connection to database "{path}". SQLite3 version: {sqlite3.version}')
@@ -54,6 +45,9 @@ class SukajanDatabase(object):
 
     def __del__(self):
         # Close database connection.
+        if self._conn is None:
+            return
+
         self._conn.close()
 
 
@@ -69,26 +63,21 @@ class SukajanDatabase(object):
         # If the connection has not yet been established,
         # do nothing.
         if self._conn is None:
-           return
+           raise Exception('Invalid SQLite3 connection state.')
 
         # Execute command.
-        try:
-           self._cur.execute(cmd)
+        self._cur.execute(cmd)
 
-           # Fetch results from db.
-           tmp_res = None
-           if n < 0:
-               return None
-           match n:
-               case 0: tmp_res = self._cur.fetchall()
-               case 1: tmp_res = self._cur.fetchone()
-               case _: tmp_res = self._cur.fetchmany(n)
+        # Fetch results from db.
+        tmp_res = None
+        if n < 0:
+            return None
+        match n:
+            case 0: tmp_res = self._cur.fetchall()
+            case 1: tmp_res = self._cur.fetchone()
+            case _: tmp_res = self._cur.fetchmany(n)
 
-           return None if mode == 0 else tmp_res
-        except Exception as tmp_e:
-            logging.error(f'Failed to execute SQL command "{cmd}". Desc: {tmp_e}')
-
-        return None
+        return None if mode == 0 else tmp_res
 
 
     # Executes an SQL command with no return value.
@@ -109,6 +98,9 @@ class SukajanDatabase(object):
     #
     # Returns nothing.
     def flush(self) -> None:
+        if self._conn is None:
+            raise Exception(f'Invalid SQLite3 connection state.')
+
         self._conn.commit()
 
 
@@ -120,7 +112,6 @@ class SukajanDatabase(object):
     def __createdb(self, path: str, cfg: sj_config.SukajanConfig) -> None:
         # Create the database by attempting to connect to it.
         self._conn = sqlite3.connect(path)
-        self._cur = self._conn.cursor()
         if self._conn is None:
             raise Exception(f'Failed to create database "{path}".')
 
@@ -130,7 +121,7 @@ class SukajanDatabase(object):
         #          name    - guild name
         #          ownerid - id of the guild owner
         #          created - time it was created 
-        self._cur.execute(
+        self._conn.execute(
             '''CREATE TABLE IF NOT EXISTS guilds(
                 id      VARCHAR(256) NOT NULL,
                 ownerid VARCHAR(256) NOT NULL,
@@ -147,7 +138,7 @@ class SukajanDatabase(object):
         #          alias   - alias the bot will use on that guild
         #          avatar  - URL of the avatar the bot will use on that guild
         #          logchan - id of the modlog channel
-        self._cur.execute(
+        self._conn.execute(
             f'''CREATE TABLE IF NOT EXISTS guildconfig(
                 guildid VARCHAR(256) NOT NULL,
                 prefix VARCHAR(10) DEFAULT '{cfg.getvalue('prefix')}',
