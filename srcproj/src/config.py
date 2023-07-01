@@ -1,6 +1,6 @@
 ######################################################################
 # Project:    Sukajan Bot v0.1                                       #
-# File Name:  init.py                                                #
+# File Name:  config.py                                              #
 # Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
 # Description:                                                       #
 #   a bot for the KirikoMains subreddit for advanced custom          #
@@ -9,7 +9,7 @@
 # (C) 2023 Sukajan One-Trick. All rights reserved.                   #
 ######################################################################
 
-# This file implements the init module, managing configuration resources
+# This file implements the config module, managing configuration resources
 # and constants.
 
 # imports
@@ -21,18 +21,23 @@ import logging
 # bot-wide constants.
 class SukajanConfig(object):
     def __init__(self):
-        self._object = {}
+        self._object = dict()
 
         # Load config file.
         if not self.readconfig():
             raise Exception(f'Failed to read config file ".env".')
 
 
+    def __del__(self):
+        # Write-back config if it has changed.
+        self.writeconfig()
+
+
     # Retrieves a value from the internal settings object. If the key
     # does not exist, return '*fallback*.
     #
     # Returns value associated with *key*, otherwise *fallback*.
-    def getvalue(self, key: str, fallback: any) -> any:
+    def getvalue(self, key: str, fallback: any = None) -> any:
         return self._object.get(key, fallback)
 
     
@@ -81,5 +86,21 @@ class SukajanConfig(object):
 
         # Everything went well.
         return True
+
+
+
+# This class, as opposed to SukajanConfig holds guild-specific
+# configuration settings.
+class SukajanGuildConfig(object):
+    def __init__(self, settings: tuple):
+        if settings is None:
+            raise Exception('Invalid "settings" tuple.')
+
+        # settings are provided in this order: (guildid, prefix, alias, avatar, logchan)
+        self.id      = settings[0]
+        self.pre     = settings[1]
+        self.alias   = settings[2]
+        self.avatar  = settings[3]
+        self.logchan = settings[4]
 
 

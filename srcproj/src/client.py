@@ -12,11 +12,11 @@
 # This file implements the client.
 
 # imports
-from ast import Try
 import logging
 import discord
 import os
-import init as sj_init
+import config as sj_cfg
+import db as sj_db
 
 
 # This class reimplements certain aspects of the event handlers, etc.
@@ -24,36 +24,86 @@ class SukajanClient(discord.Client):
     def __init__(self):
         # Let discord.py do its default initialization.
         super().__init__(intents=discord.Intents.all())
+        self._gcfg = dict()
 
         # Setup logging.
         logging.root.setLevel(logging.NOTSET)
         
         # Load configuration file.
         try:
-            self.cfg = sj_init.SukajanConfig()
+            self._cfg = sj_cfg.SukajanConfig()
 
-            if self.cfg.getvalue('token', None) is None:
+            if self._cfg.getvalue('token') is None:
                 raise Exception('Failed to retrieve token from configuration file.')
         except Exception as tmp_e:
-            logging.critical(f'Failed to load configuration settings. Desc: {tmp_e}')
+            logging.critical(f'Failed to load configuration settings. Desc: {tmp_e}.')
+
+            os.abort()
+
+        # Establish database connection.
+        tmp_dbpath = self._cfg.getvalue('db')
+        try:
+            self._db = sj_db.SukajanDatabase(tmp_dbpath, self._cfg)
+        except Exception as tmp_e:
+            logging.critical(f'Could not establish database connection to database "{tmp_dbpath}". Desc: {tmp_e}.')
 
             os.abort()
 
         # Start the mainloop of the client.
         self.run(
-            token=self.cfg.getvalue('token', None),
-            reconnect=self.cfg.getvalue('reconnect', True)
+            token=self._cfg.getvalue('token', None),
+            reconnect=self._cfg.getvalue('reconnect', True)
         )
-
-
-    def __del__(self):
-        # Write config file on program exit.
-        self.cfg.writeconfig()
 
 
     # Reimplements the 'on_ready' event handler.
     async def on_ready(self) -> None:
-        logging.info(f'SukajanBot is now available as "{self.user}". Ready.\n')
+        # Fetch guild settings for all guilds he bot is connected to.
+        for guild in self.guilds:
+            tmp_res = self._db.execquery(f'SELECT * from guildconfig WHERE guildid = \'{guild.id}\'', 1)
+
+            # Generate guild config object and put it into the dictionary.
+            try:
+                self._gcfg[guild.id] = sj_cfg.SukajanGuildConfig(tmp_res)
+
+                logging.info(f'Successfully loaded configuration for guild "{guild.name}" (id: {guild.id})')
+            except Exception as tmp_e:
+                logging.error(f'Could not load configuration for guild {guild.name} (id: {guild.id}).')
+
+        # We are done setting things up and are now ready.
+        logging.info(f'SukajanBot is now available as "{self.user}". Ready.')
+
+
+    # Reimplements the 'on_create' event handler.
+    # This handler is executed when
+    #     (1) the bot creates a guild
+    #     (2) the bot joins a guild
+    #
+    # Returns nothing.
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        # Add guild info to the bots database.
+        self._db.execcommand(f'INSERT INTO guilds VALUES({guild.id}, {guild.owner_id}, -1)')
+        self._db.execcommand(f'INSERT INTO guildconfig (guildid) VALUES({guild.id})')
+        self._db.flush()
+
+        msg = 'Created and joined' if guild.owner_id == self.user.id else 'Joined'
+        logging.info(f'{msg} guild "{guild.name}" (id: {guild.id}).')
+
+
+    # Reimplements the 'on_guild_remove' event handler.
+    # This handler is executed when
+    #    (1) the bot leaves the guild
+    #    (2) the bot is kicked/banned from the guild
+    #    (3) the guild is deleted by the owner
+    #
+    # Returns nothing.
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        # Remove guild info from the database.
+        self._db.execcommand(f'DELETE FROM guilds where id={guild.id}')
+        self._db.execcommand(f'DELETE FROM guildconfig WHERE guildid={guild.id}')
+        self._db.flush()
+
+        logging.info(f'Left guild "{guild.name}" (id: {guild.id}).')
 
 
     # Reimplements the 'on_message' event handler.

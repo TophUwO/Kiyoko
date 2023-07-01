@@ -12,12 +12,12 @@
 # This file serves as the main entry point for the application.
 
 # imports
-import client
+import client as sj_client
 
 
 # Start main loop.
 if __name__ == '__main__':
-    with client.SukajanClient() as sj_client:
+    with sj_client.SukajanClient() as tmp_client:
         pass
 
 
