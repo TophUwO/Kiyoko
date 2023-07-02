@@ -363,6 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # Misc
-avatars/
 db/
 *.token

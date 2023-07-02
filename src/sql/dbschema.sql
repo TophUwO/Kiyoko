@@ -44,7 +44,4 @@ CREATE TABLE guildsettings (
     )
 );
 
--- Apply the changes.
-COMMIT
-
 

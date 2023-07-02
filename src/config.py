@@ -13,10 +13,8 @@
 # and constants.
 
 # imports
+from loguru import logger
 import dotenv
-import logging
-import os
-import errno
 
 
 # Raise this exception if the token is somehow invalid.
@@ -80,7 +78,7 @@ class SukajanConfig(object):
         try:
             self._object = dotenv.dotenv_values(fname)
         except:
-            logging.critical(f'Failed to read global configuration from \'{fname}\' file.')
+            logger.error(f'Failed to read global configuration from \'{fname}\' file.')
 
             raise
 
@@ -94,12 +92,12 @@ class SukajanConfig(object):
             if self._token is None or self._token == '':
                 raise TokenError('Token is invalid.')
         except:
-            logging.critical(f'Failed to retrieve token from \'{tokenpath}\' file.')
+            logger.error(f'Failed to retrieve token from \'{tokenpath}\' file.')
 
             raise
 
         # Everything went well.
-        logging.debug('Successfully loaded global configuration.')
+        logger.success('Successfully loaded global configuration.')
 
 
     # Writes the current configuration to the ".env" file.
@@ -115,13 +113,13 @@ class SukajanConfig(object):
                 for key, value in self._object.items():
                     tmp_file.write(f'{key} = {value}\n')
         except:
-            logging.error(f'Failed to write to configuration file \'{fname}\'.')
+            logger.error(f'Failed to write to configuration file \'{fname}\'.')
 
             raise
 
         # Everything went well.
         self._changed = False
-        logging.debug('Successfully wrote global configuration to file.')
+        logger.success('Successfully wrote global configuration to file.')
 
 
 

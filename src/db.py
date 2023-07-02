@@ -12,7 +12,7 @@
 # This file implements the database connection and bookkeeping.
 
 # imports
-import logging
+from loguru import logger
 import os
 import sqlite3
 
@@ -37,23 +37,23 @@ class SukajanDatabase(object):
         direxists = os.path.exists(dbdir)
         dbexists  = os.path.exists(dbpath)
         if not direxists or not dbexists:
-            logging.debug(f'Could not find "{dbpath}". Creating it ...')
+            logger.debug(f'Could not find "{dbpath}". Creating it ...')
 
             self.__createdb(dbpath, dbschema, direxists, dbdir)
         else:
-            logging.debug(f'Found database file: "{dbpath}".')
+            logger.debug(f'Found database file: "{dbpath}".')
 
         # Establish connection. If this fails, an exception will be raised.
         try:
             self._conn = sqlite3.connect(dbpath)
             self._cur  = self._conn.cursor()
         except:
-            logging.critical(f'Failed to connect to database \'{dbpath}\'.)')
+            logger.error(f'Failed to connect to database \'{dbpath}\'.)')
 
             raise
 
         # Everything was successful.
-        logging.debug(f'Successfully established connection to database "{dbpath}". SQLite3 version: {sqlite3.version}')
+        logger.success(f'Successfully established connection to database \'{dbpath}\'. SQLite3 version: {sqlite3.version}')
 
 
     def __del__(self):
@@ -135,7 +135,7 @@ class SukajanDatabase(object):
         try:
             self._conn = sqlite3.connect(path)
         except:
-            logging.critical(f'Failed to create database \'{path}\'')
+            logger.error(f'Failed to create database \'{path}\'')
 
             raise
 
@@ -146,12 +146,12 @@ class SukajanDatabase(object):
             with open(schemapath, 'r') as tmp_fschema:
                 self._conn.executescript(tmp_fschema.read())
         except:
-            logging.critical(f'Failed to execute SQL script \'{schemapath}\'.')
+            logger.error(f'Failed to execute SQL script \'{schemapath}\'.')
 
             raise
 
         # If everything went well, we should arrive here.
         self._conn.close()
-        logging.info(f'Successfully created database "{path}".')
+        logger.success(f'Successfully created database \'{path}\'.')
 
 

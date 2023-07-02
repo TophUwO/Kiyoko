@@ -12,12 +12,12 @@
 # This file implements the client.
 
 # imports
-import logging
 import discord
 import discord.ext.commands as commands
 import os
 import math
-import time
+import sys
+from loguru import logger
 
 import src.config as sj_cfg
 import src.db as sj_db
@@ -28,7 +28,7 @@ class SukajanClient(commands.Bot):
     def __init__(self) -> None:
         # Load configuration file.
         self.cfg = sj_cfg.SukajanConfig('conf/.env')
-
+        
         # Setup logging.
         self.__initlogging()
 
@@ -91,7 +91,7 @@ class SukajanClient(commands.Bot):
         self.gcfg[guild.id].alias = value
 
         # Everything went well.
-        logging.info(f'Successfully updated guild setting field "{field}" for guild "{guild.name}" (id: {guild.id}) to "{value}".')
+        logger.success(f'Successfully updated guild setting field "{field}" for guild "{guild.name}" (id: {guild.id}) to "{value}".')
 
 
     # Fetches current guild settings in case they have updated while the bot was offline.
@@ -116,14 +116,10 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     async def __applyglobalsettings(self) -> None:
         # Apply global bot account settings.
-        with open(self.cfg.getvalue('avatar'), 'rb') as tmp_avatar:
-            await self.user.edit(
-                username=self.cfg.getvalue('name')
-                #avatar=tmp_avatar.read()
-            )
+        await self.user.edit(username=self.cfg.getvalue('name'))
 
         # Everything went well.
-        logging.info('Successfully applied global settings.')
+        logger.success('Successfully applied global settings.')
 
 
     # Applies guild-specific member settings when the bot goes online.
@@ -141,12 +137,12 @@ class SukajanClient(commands.Bot):
 
                 await member.edit(nick=info.alias)
         except Exception as tmp_e:
-            logging.error(f'Failed to apply guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
+            logger.error(f'Failed to apply guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
             return
 
         # Everything went well.
-        logging.info(f'Successfully applied settings for guild "{guild.name}" (id: {guild.id}).')
+        logger.success(f'Successfully applied settings for guild "{guild.name}" (id: {guild.id}).')
 
 
     # Loads all extentions present.
@@ -165,15 +161,15 @@ class SukajanClient(commands.Bot):
                     try:
                         await self.load_extension('src.modules.' + modname)
                     except Exception as tmp_e:
-                        logging.error(f'Failed to load module "{modname}".')
+                        logger.error(f'Failed to load module "{modname}".')
 
                         continue
 
-                    logging.info(f'Successfully loaded module "{modname}".')
+                    logger.success(f'Successfully loaded module "{modname}".')
                     nextentions += 1
-            logging.info(f'Loaded {nextentions} modules.')
+            logger.debug(f'Loaded {nextentions} modules.')
         else:
-            logging.info('No modules to load.')
+            logger.debug('No modules to load.')
 
 
     # Syncs the command tree with all guilds the bot is connected
@@ -186,14 +182,14 @@ class SukajanClient(commands.Bot):
             try:
                 await self.tree.sync(guild=guild)
             except Exception as tmp_e:
-                logging.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
+                logger.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
                 iserr = True
                 continue
 
         # Everything went well.
         if not iserr:
-            logging.debug('Successfully synced command tree to discord.')
+            logger.success('Successfully synced command tree to discord.')
 
 
     # Initializes the logging facility.
@@ -201,29 +197,29 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     def __initlogging(self) -> None:
         # Get required settings.
-        logdir  = self.cfg.getvalue('logdir')
-        pattern = self.cfg.getvalue('logfilename')
+        logdir = self.cfg.getvalue('logdir')
+        fname  = self.cfg.getvalue('logfilename')
+        fmt    = self.cfg.getvalue('logformat')
+        rot    = self.cfg.getvalue('logrotation')
+        ret    = self.cfg.getvalue('logretention')
 
         # Create 'log' directory if it does not exist.
         try:
             if not os.path.exists(logdir):
                 os.mkdir(logdir)
         except:
-            logging.critical(f'Failed to create log directory \'{logdir}\'.')
+            logger.critical(f'Failed to create log directory \'{logdir}\'.')
 
             raise
-        
-        # Set up basic logging configuration.
-        logfmt = '[%(levelname)s] %(module)s: %(message)s'
-        log_handlers = [
-            logging.FileHandler(logdir + '/' + time.strftime(pattern) + '.log', 'w', 'utf-8'),
-            logging.StreamHandler()
-        ]
-        logging.root.setLevel(logging.DEBUG)
-        logging.basicConfig(level=logging.DEBUG, handlers=log_handlers, format=logfmt)
+      
+        # Setup loguru.
+        logger.remove()
+        logger.level('WARNING', color='<yellow>')
+        logger.add(sys.stderr, format=fmt, colorize=True)
+        logger.add(logdir + '/' + fname, format=fmt, rotation=rot, retention=ret)
 
         # Everything went well.
-        logging.debug('Successfully initialized logging facility.')
+        logger.success('Successfully initialized logging facility.')
 
 
     # Reimplements the 'on_ready' event handler.
@@ -239,7 +235,7 @@ class SukajanClient(commands.Bot):
         try:
             await self.__applyglobalsettings()
         except:
-            logging.critical(f'Failed to apply global settings.')
+            logger.error(f'Failed to apply global settings.')
 
             raise
 
@@ -255,15 +251,15 @@ class SukajanClient(commands.Bot):
                 # Apply guild settings.
                 await self.__applyguildsettings(tmp_guild, self.gcfg[tmp_guild.id])
             except Exception as tmp_e:
-                logging.error(f'Could not load configuration for guild {tmp_guild.name} (id: {tmp_guild.id}). Desc: {tmp_e}')
+                logger.error(f'Could not load configuration for guild {tmp_guild.name} (id: {tmp_guild.id}). Desc: {tmp_e}')
 
                 continue
 
             # Everything went well for this guild.
-            logging.info(f'Successfully loaded configuration for guild "{tmp_guild.name}" (id: {tmp_guild.id}).')
+            logger.info(f'Successfully loaded configuration for guild "{tmp_guild.name}" (id: {tmp_guild.id}).')
 
         # We are done setting things up and are now ready.
-        logging.info(f'SukajanBot is now available as "{self.user}". Ready.')
+        logger.info(f'SukajanBot is now available as "{self.user}". Ready.')
 
 
     # Reimplements the 'on_create' event handler.
@@ -277,11 +273,11 @@ class SukajanClient(commands.Bot):
         try:
             self.__addguildsettings(guild)
         except Exception as tmp_e:
-            logging.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
+            logger.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
         # Print info message.
         msg = 'Created and joined' if guild.owner_id == self.user.id else 'Joined'
-        logging.info(f'{msg} guild "{guild.name}" (id: {guild.id}).')
+        logger.info(f'{msg} guild "{guild.name}" (id: {guild.id}).')
 
 
     # Reimplements the 'on_guild_remove' event handler.
@@ -296,10 +292,10 @@ class SukajanClient(commands.Bot):
         try:
             self.__remguildsettings(guild)
         except Exception as tmp_e:
-            logging.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
+            logger.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
         # Print info message.
-        logging.info(f'Left guild "{guild.name}" (id: {guild.id}).')
+        logger.info(f'Left guild "{guild.name}" (id: {guild.id}).')
 
 
     # Reimplements the 'on_message' event handler.
@@ -325,12 +321,12 @@ class SukajanClient(commands.Bot):
             try:
                 self.__updguildsetting(guild, 'alias', nnick)
             except Exception as tmp_e:
-                logging.info(f'Failed to update guild setting "alias" for guild {guild.name} (id: {guild.id}). Desc: {tmp_e}')
+                logger.info(f'Failed to update guild setting "alias" for guild {guild.name} (id: {guild.id}). Desc: {tmp_e}')
 
                 return
 
             # Everything went well.
             isdef = ' (default)' if after.nick is None else ''
-            logging.info(f'Updated nickname for guild "{guild.name}" (id: {guild.id}) from "{before.nick}" to "{nnick}"{isdef}.')
+            logger.info(f'Updated nickname for guild "{guild.name}" (id: {guild.id}) from "{before.nick}" to "{nnick}"{isdef}.')
 
 
