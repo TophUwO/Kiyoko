@@ -1,0 +1,10 @@
+--- use sql script for generating the db
+- make it so that when the bot leaves, only 'guilds' table is updated, so that guild settings can be persistent, delete data after three months of not being on the server
+- brainstorm an actual name for the bot + avatar
+- implement a way to clear the logs directory if a specific limit has been reached
+--- separate token from .env file so that the global settings can be included in the repo
+- rewamp guild config object so it's also a dict
+- put guild-related events in its own 'guild' module
+- add .env validator
+- add status per guild (command) (any guild-specific errors) (possibly add command for global errors)
+- add check for required modules

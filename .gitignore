@@ -363,8 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # Misc
-srcproj/avatars/
-srcproj/env/
-srcproj/db/
-srcproj/logs/
-*.env
+avatars/
+db/
+*.token

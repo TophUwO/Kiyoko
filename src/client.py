@@ -14,81 +14,39 @@
 # imports
 import logging
 import discord
+import discord.ext.commands as commands
 import os
 import math
 import time
 
-import config as sj_cfg
-import db as sj_db
-
-
-# Generates the log file name for the current session.
-#
-# Returns file name string (without extention).
-def genlogfname() -> str:
-    # Format message.
-    return time.strftime(f'log_%m-%d-%Y_%H-%M-%S')
-
-
-# Sets up the logging facility.
-#
-# Returns nothing.
-def setuplogging(dir: str) -> None:
-    if dir is None:
-        raise Exception('Invalid logging directory.')
-
-    # Create 'log' directory if it does not exist.
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    
-    # Set up basic logging configuration.
-    logfmt = '[%(levelname)s] %(module)s: %(message)s'
-    log_handlers = [
-        logging.FileHandler('./' + dir + '/' + genlogfname() + '.log', 'w', 'utf-8'),
-        logging.StreamHandler()
-    ]
-    logging.basicConfig(level=logging.DEBUG, handlers=log_handlers, format=logfmt)
+import src.config as sj_cfg
+import src.db as sj_db
 
 
 # This class reimplements certain aspects of the event handlers, etc.
-class SukajanClient(discord.Client):
-    def __init__(self):
+class SukajanClient(commands.Bot):
+    def __init__(self) -> None:
         # Load configuration file.
-        try:
-            self._cfg = sj_cfg.SukajanConfig()
-
-            if self._cfg.getvalue('token') is None:
-                raise Exception('Failed to retrieve token from configuration file.')
-        except Exception as tmp_e:
-            logging.critical(f'Failed to load configuration settings. Desc: {tmp_e}')
-
-            os.abort()
+        self.cfg = sj_cfg.SukajanConfig('conf/.env')
 
         # Setup logging.
-        try:
-            setuplogging(self._cfg.getvalue('logdir'))
-        except Exception as tmp_e:
-            logging.critical(f'Failed to initialize logging facility. Desc: {tmp_e}')
-
-            os.abort()
+        self.__initlogging()
 
         # Let discord.py do its default initialization.
-        super().__init__(intents=discord.Intents.all())
-        self._gcfg = dict()
+        super().__init__(
+            command_prefix=self.cfg.getvalue('prefix', '/'),
+            intents=discord.Intents.all(),
+            help_command=None
+        )
+        self.gcfg = dict()
 
         # Establish database connection.
-        dbpath = self._cfg.getvalue('db')
-        try:
-            self._db = sj_db.SukajanDatabase(dbpath, self._cfg)
-        except Exception as tmp_e:
-            logging.critical(f'Could not establish database connection to database "{dbpath}". Desc: {tmp_e}')
-
-            os.abort()
+        self._db = sj_db.SukajanDatabase(self.cfg)
 
         # Start the mainloop of the client.
         self.run(
-            token=self._cfg.getvalue('token', None),
-            reconnect=self._cfg.getvalue('reconnect', True)
+            token=self.cfg.getvalue('token', None),
+            reconnect=self.cfg.getvalue('reconnect', True)
         )
 
 
@@ -102,12 +60,12 @@ class SukajanClient(discord.Client):
 
         # Add guild info to the bots database.
         self._db.execcommand(f'INSERT INTO guilds VALUES({id}, {guild.owner_id}, {ts})')
-        self._db.execcommand(f'INSERT INTO guildconfig (guildid) VALUES({id})')
+        self._db.execcommand(f'INSERT INTO guildsettings (guildid) VALUES({id})')
         self._db.flush()
 
         # Add guild info to dict.
-        tmp_ginfo = self._db.execquery(f'SELECT * FROM guildconfig WHERE guildid = \'{id}\'', 1)
-        self._gcfg[id] = sj_cfg.SukajanGuildConfig(tmp_ginfo)
+        tmp_ginfo = self._db.execquery(f'SELECT * FROM guildsettings WHERE guildid = \'{id}\'', 1)
+        self.gcfg[id] = sj_cfg.SukajanGuildConfig(tmp_ginfo)
 
 
     # Removes guild settings from the database.
@@ -116,11 +74,11 @@ class SukajanClient(discord.Client):
     def __remguildsettings(self, guild: discord.Guild) -> None:
         # Remove guild info from the database.
         self._db.execcommand(f'DELETE FROM guilds WHERE id={guild.id}')
-        self._db.execcommand(f'DELETE FROM guildconfig WHERE guildid={guild.id}')
+        self._db.execcommand(f'DELETE FROM guildsettings WHERE guildid={guild.id}')
         self._db.flush()
 
         # Remove guild info from dict.
-        self._gcfg.pop(guild.id)
+        self.gcfg.pop(guild.id)
 
 
     # Updates one specific guild setting.
@@ -128,9 +86,9 @@ class SukajanClient(discord.Client):
     # Returns nothing.
     def __updguildsetting(self, guild: discord.Guild, field: str, value: any) -> None:
         # Update database setting.
-        self._db.execcommand(f'UPDATE guildconfig SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
+        self._db.execcommand(f'UPDATE guildsettings SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
         self._db.flush()
-        self._gcfg[guild.id].alias = value
+        self.gcfg[guild.id].alias = value
 
         # Everything went well.
         logging.info(f'Successfully updated guild setting field "{field}" for guild "{guild.name}" (id: {guild.id}) to "{value}".')
@@ -148,6 +106,7 @@ class SukajanClient(discord.Client):
             None,
             None,
             member.nick,
+            None,
             None
         )), member)
 
@@ -157,10 +116,10 @@ class SukajanClient(discord.Client):
     # Returns nothing.
     async def __applyglobalsettings(self) -> None:
         # Apply global bot account settings.
-        with open(self._cfg.getvalue('avatar'), 'rb') as tmp_avatar:
+        with open(self.cfg.getvalue('avatar'), 'rb') as tmp_avatar:
             await self.user.edit(
-                username=self._cfg.getvalue('alias'),
-                avatar=tmp_avatar.read()
+                username=self.cfg.getvalue('name')
+                #avatar=tmp_avatar.read()
             )
 
         # Everything went well.
@@ -190,29 +149,111 @@ class SukajanClient(discord.Client):
         logging.info(f'Successfully applied settings for guild "{guild.name}" (id: {guild.id}).')
 
 
+    # Loads all extentions present.
+    #
+    # Returns nothing.
+    async def __loadextentions(self) -> None:
+        # Inject modules. Only attempt to load them if the path
+        # exists.
+        modpath = self.cfg.getvalue('moduledir')
+        if os.path.exists(modpath):
+            nextentions = 0
+
+            for fname in os.listdir(modpath):
+                if fname.endswith('.py'):
+                    modname = fname[:-3]
+                    try:
+                        await self.load_extension('src.modules.' + modname)
+                    except Exception as tmp_e:
+                        logging.error(f'Failed to load module "{modname}".')
+
+                        continue
+
+                    logging.info(f'Successfully loaded module "{modname}".')
+                    nextentions += 1
+            logging.info(f'Loaded {nextentions} modules.')
+        else:
+            logging.info('No modules to load.')
+
+
+    # Syncs the command tree with all guilds the bot is connected
+    # to.
+    #
+    # Returns nothing.
+    async def __synccmdtree(self) -> None:
+        iserr = False
+        for guild in self.guilds:
+            try:
+                await self.tree.sync(guild=guild)
+            except Exception as tmp_e:
+                logging.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
+
+                iserr = True
+                continue
+
+        # Everything went well.
+        if not iserr:
+            logging.debug('Successfully synced command tree to discord.')
+
+
+    # Initializes the logging facility.
+    #
+    # Returns nothing.
+    def __initlogging(self) -> None:
+        # Get required settings.
+        logdir  = self.cfg.getvalue('logdir')
+        pattern = self.cfg.getvalue('logfilename')
+
+        # Create 'log' directory if it does not exist.
+        try:
+            if not os.path.exists(logdir):
+                os.mkdir(logdir)
+        except:
+            logging.critical(f'Failed to create log directory \'{logdir}\'.')
+
+            raise
+        
+        # Set up basic logging configuration.
+        logfmt = '[%(levelname)s] %(module)s: %(message)s'
+        log_handlers = [
+            logging.FileHandler(logdir + '/' + time.strftime(pattern) + '.log', 'w', 'utf-8'),
+            logging.StreamHandler()
+        ]
+        logging.root.setLevel(logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, handlers=log_handlers, format=logfmt)
+
+        # Everything went well.
+        logging.debug('Successfully initialized logging facility.')
+
+
     # Reimplements the 'on_ready' event handler.
     #
     # Returns nothing.
     async def on_ready(self) -> None:
+        # Load extentions.
+        await self.__loadextentions()
+        # Sync command tree.
+        await self.__synccmdtree()
+
         # Apply global settings.
         try:
             await self.__applyglobalsettings()
-        except Exception as tmp_e:
-            logging.critical(f'Failed to apply global settings. Desc: {tmp_e}')
+        except:
+            logging.critical(f'Failed to apply global settings.')
 
-            os.abort()
+            raise
 
         # Fetch guild settings for all guilds he bot is connected to.
         for tmp_guild in self.guilds:
             # Generate guild config object and put it into the dictionary.
             try:
-                ginfo = self._db.execquery(f'SELECT * from guildconfig WHERE guildid = \'{tmp_guild.id}\'', 1)
+                ginfo = self._db.execquery(f'SELECT * from guildsettings WHERE guildid = \'{tmp_guild.id}\'', 1)
 
                 # Store guild settings in dictionary (to reduce db calls)
-                self._gcfg[tmp_guild.id] = sj_cfg.SukajanGuildConfig(ginfo)
+                self.gcfg[tmp_guild.id] = sj_cfg.SukajanGuildConfig(ginfo)
 
                 # Apply guild settings.
-                await self.__applyguildsettings(tmp_guild, self._gcfg[tmp_guild.id])
+                await self.__applyguildsettings(tmp_guild, self.gcfg[tmp_guild.id])
             except Exception as tmp_e:
                 logging.error(f'Could not load configuration for guild {tmp_guild.name} (id: {tmp_guild.id}). Desc: {tmp_e}')
 
@@ -269,9 +310,6 @@ class SukajanClient(discord.Client):
         if message.author.bot:
             return
 
-        # Send a temporary 'Hello, world!' message.
-        await message.channel.send('Hello, world!')
-
 
     # Reimplements the 'on_member_update' event handler.
     #
@@ -280,7 +318,7 @@ class SukajanClient(discord.Client):
         # If the bot client itself got updated, fetch the changes
         # and update database and internal cache.
         if after is after.guild.get_member(self.user.id):
-            nnick = after.nick if after.nick is not None else self._cfg.getvalue('alias')
+            nnick = after.nick if after.nick is not None else self.cfg.getvalue('alias')
             guild = after.guild
 
             # Update guild settings for current guild.

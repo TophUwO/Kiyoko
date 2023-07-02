@@ -1,6 +1,6 @@
 ######################################################################
 # Project:    Sukajan Bot v0.1                                       #
-# File Name:  db.py                                                #
+# File Name:  db.py                                                  #
 # Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
 # Description:                                                       #
 #   a bot for the KirikoMains subreddit for advanced custom          #
@@ -16,32 +16,44 @@ import logging
 import os
 import sqlite3
 
-import config as sj_config
+import src.config as sj_config
+
+
+# Raise this exception if the database is in an invalid state.
+class DatabaseStateError(Exception):
+    pass
 
 
 # This class holds the database connection.
 class SukajanDatabase(object):
-    def __init__(self, path: str, cfg: sj_config.SukajanConfig):
-        # If path is invalid, abort.
-        if path is None or path == '':
-            raise Exception('Invalid or empty database path.')
+    def __init__(self, cfg: sj_config.SukajanConfig):
+        # Get required settings from config.
+        dbdir    = cfg.getvalue('dbdir')
+        dbpath   = dbdir + '/' + cfg.getvalue('dbfile')
+        dbschema = cfg.getvalue('dbschemapath')
 
         # Open database connection.
         # If the file does not yet exist, create it and set everything up.
-        dbexists = os.path.exists(path)
-        if not dbexists:
-            logging.warning(f'Database "{path}" does not exist. Creating it ...')
+        direxists = os.path.exists(dbdir)
+        dbexists  = os.path.exists(dbpath)
+        if not direxists or not dbexists:
+            logging.debug(f'Could not find "{dbpath}". Creating it ...')
 
-            self.__createdb(path, cfg)
+            self.__createdb(dbpath, dbschema, direxists, dbdir)
         else:
-            logging.info(f'Found database file: "{path}".')
+            logging.debug(f'Found database file: "{dbpath}".')
 
         # Establish connection. If this fails, an exception will be raised.
-        self._conn = sqlite3.connect(path)
-        self._cur  = self._conn.cursor()
+        try:
+            self._conn = sqlite3.connect(dbpath)
+            self._cur  = self._conn.cursor()
+        except:
+            logging.critical(f'Failed to connect to database \'{dbpath}\'.)')
+
+            raise
 
         # Everything was successful.
-        logging.info(f'Successfully established connection to database "{path}". SQLite3 version: {sqlite3.version}')
+        logging.debug(f'Successfully established connection to database "{dbpath}". SQLite3 version: {sqlite3.version}')
 
 
     def __del__(self):
@@ -49,6 +61,7 @@ class SukajanDatabase(object):
         if self._conn is None:
             return
 
+        self._conn.commit()
         self._conn.close()
 
 
@@ -64,7 +77,7 @@ class SukajanDatabase(object):
         # If the connection has not yet been established,
         # do nothing.
         if self._conn is None:
-           raise Exception('Invalid SQLite3 connection state.')
+           raise DatabaseStateError
 
         # Execute command.
         self._cur.execute(cmd)
@@ -84,8 +97,11 @@ class SukajanDatabase(object):
     # Executes an SQL command with no return value.
     #
     # Returns nothing.
-    def execcommand(self, cmd: str) -> None:
+    def execcommand(self, cmd: str, flush: bool = False) -> None:
         self.__execquery(cmd, 0, 0)
+
+        if flush:
+            self._conn.commit()
 
 
     # Executes an SQL query.
@@ -100,57 +116,41 @@ class SukajanDatabase(object):
     # Returns nothing.
     def flush(self) -> None:
         if self._conn is None:
-            raise Exception(f'Invalid SQLite3 connection state.')
+            raise DatabaseStateError
 
         self._conn.commit()
 
 
-    # Create the database structure if it has not yet been created.
+    # Create the database structure using a specified schema.
     # The resulting database is empty but ready for use.
     #
     # Returns nothing, but throws an exception in case of an
     # error.
-    def __createdb(self, path: str, cfg: sj_config.SukajanConfig) -> None:
+    def __createdb(self, path: str, schemapath: str, direxists: bool, dbdir: str) -> None:
+        # Create database directory if it does not exist.
+        if not direxists:
+            os.mkdir(dbdir)
+
         # Create the database by attempting to connect to it.
-        self._conn = sqlite3.connect(path)
-        if self._conn is None:
-            raise Exception(f'Failed to create database "{path}".')
+        try:
+            self._conn = sqlite3.connect(path)
+        except:
+            logging.critical(f'Failed to create database \'{path}\'')
 
-        # Create GUILDS table (primary key 'id')
-        # Fields:
-        #     (pk) id      - guild id
-        #          name    - guild name
-        #          ownerid - id of the guild owner
-        #          created - time it was created 
-        self._conn.execute(
-            '''CREATE TABLE IF NOT EXISTS guilds(
-                id      VARCHAR(256) NOT NULL,
-                ownerid VARCHAR(256) NOT NULL,
-                created INTEGER NOT NULL,
+            raise
 
-                PRIMARY KEY(id)
-            )'''
-        )
-        
-        # Create GUILDCONFIG table
-        # Fields:
-        #     (fk) guildid - id the of the guild the setting belongs to
-        #          prefix  - command prefix
-        #          alias   - alias the bot will use on that guild
-        #          avatar  - URL of the avatar the bot will use on that guild
-        #          logchan - id of the modlog channel
-        self._conn.execute(
-            f'''CREATE TABLE IF NOT EXISTS guildconfig(
-                guildid VARCHAR(256) NOT NULL,
-                prefix VARCHAR(10) DEFAULT '{cfg.getvalue('prefix')}',
-                alias VARCHAR(256) DEFAULT '{cfg.getvalue('alias')}',
-                logchan VARCHAR(256),
+        # Run SQL script specified in .env for creating the
+        # database.
+        # Check if schema file exists.
+        try:
+            with open(schemapath, 'r') as tmp_fschema:
+                self._conn.executescript(tmp_fschema.read())
+        except:
+            logging.critical(f'Failed to execute SQL script \'{schemapath}\'.')
 
-                PRIMARY KEY(guildid)
-            )'''
-        )
+            raise
 
-        # Close connection once we are done and print info message.
+        # If everything went well, we should arrive here.
         self._conn.close()
         logging.info(f'Successfully created database "{path}".')
 

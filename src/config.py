@@ -15,21 +15,33 @@
 # imports
 import dotenv
 import logging
+import os
+import errno
+
+
+# Raise this exception if the token is somehow invalid.
+class TokenError(Exception):
+    pass
 
 
 # This class holds all configuration options the bot supports alongside
 # bot-wide constants.
 class SukajanConfig(object):
-    def __init__(self):
-        self._object = dict()
+    def __init__(self, path: str):
+        # Init attribs.
+        self._changed = False
+        self._object  = dict()
+        self._token   = ''
+        self._path    = path
 
         # Load config file.
-        self.readconfig()
+        self.readconfig(path)
 
 
     def __del__(self):
         # Write-back config if it has changed.
-        self.writeconfig()
+        if self._changed:
+            self.writeconfig(self._path)
 
 
     # Retrieves a value from the internal settings object. If the key
@@ -37,6 +49,9 @@ class SukajanConfig(object):
     #
     # Returns value associated with *key*, otherwise *fallback*.
     def getvalue(self, key: str, fallback: any = None) -> any:
+        if key == 'token':
+            return self._token
+
         return self._object.get(key, fallback)
 
     
@@ -49,8 +64,10 @@ class SukajanConfig(object):
         # Get old value.
         oldval = self._object.get(key, None)
 
-        # Update value.
+        # Update value and internal state.
         self._object[key] = value
+        self._changed     = True
+
         return oldval
 
 
@@ -58,25 +75,53 @@ class SukajanConfig(object):
     # The internal settings object is updated.
     # 
     # Returns nothing.
-    def readconfig(self, fname: str = '.env') -> None:
-        self._object = dotenv.dotenv_values(fname)
+    def readconfig(self, fname: str) -> None:
+        # Load global settings.
+        try:
+            self._object = dotenv.dotenv_values(fname)
+        except:
+            logging.critical(f'Failed to read global configuration from \'{fname}\' file.')
+
+            raise
+
+        # Load token.
+        tokenpath = self.getvalue('tokenpath') 
+        try:
+            with open(tokenpath, 'r') as tmp_tfile:
+                self._token = tmp_tfile.read()
+
+            # Check if token is not invalid.
+            if self._token is None or self._token == '':
+                raise TokenError('Token is invalid.')
+        except:
+            logging.critical(f'Failed to retrieve token from \'{tokenpath}\' file.')
+
+            raise
+
+        # Everything went well.
+        logging.debug('Successfully loaded global configuration.')
 
 
     # Writes the current configuration to the ".env" file.
     #
     # Returns True on success, False on failure.
-    def writeconfig(self, fname: str = '.env') -> bool:
+    def writeconfig(self, fname: str) -> None:
+        if self._changed == False:
+            return
+
+        # Write all values.
         try:
             with open(fname, 'w') as tmp_file:
                 for key, value in self._object.items():
                     tmp_file.write(f'{key} = {value}\n')
-        except Exception as tmp_e:
-            logging.error(f'Failed to write to configuration file "{fname}". Desc: {tmp_e}')
+        except:
+            logging.error(f'Failed to write to configuration file \'{fname}\'.')
 
-            return False
+            raise
 
         # Everything went well.
-        return True
+        self._changed = False
+        logging.debug('Successfully wrote global configuration to file.')
 
 
 
@@ -87,10 +132,14 @@ class SukajanGuildConfig(object):
         if settings is None:
             raise Exception('Invalid "settings" tuple.')
 
-        # Settings are provided in this order: (guildid, prefix, alias, logchan).
-        self.id      = settings[0]
-        self.pre     = settings[1]
-        self.alias   = settings[2]
-        self.logchan = settings[3]
+        # Settings are provided in this order: (guildid, prefix, alias, logchan, welcomechan, goodbyechan, sendwelcome, sendgoodbye).
+        self.id          = int(settings[0])
+        self.pre         = settings[1]
+        self.alias       = settings[2]
+        self.logchan     = settings[3]
+        self.welcomechan = settings[4]
+        self.goodbyechan = settings[5]
+        self.sendwelcome = int(settings[6])
+        self.sendgoodbye = int(settings[7])
 
 

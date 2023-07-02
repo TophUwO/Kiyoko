@@ -1,6 +1,6 @@
 ######################################################################
 # Project:    Sukajan Bot v0.1                                       #
-# File Name:  sukajan.py                                             #
+# File Name:  main.py                                                #
 # Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
 # Description:                                                       #
 #   a bot for the KirikoMains subreddit for advanced custom          #
@@ -14,8 +14,9 @@
 # imports
 import logging
 import os
+import sys
 
-import client as sj_client
+import src.client as sj_client
 
 
 # Start main loop.

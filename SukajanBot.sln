@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33723.286
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "SukajanBot", "srcproj\SukajanBot.pyproj", "{02782ECE-DA2B-4C29-B79E-86D81D9DFEDF}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "SukajanBot", "SukajanBot.pyproj", "{02782ECE-DA2B-4C29-B79E-86D81D9DFEDF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
