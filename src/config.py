@@ -21,6 +21,10 @@ import dotenv
 class TokenError(Exception):
     pass
 
+# Raise this exception if there are keys missing in the .env file.
+class ConfigError(Exception):
+    pass
+
 
 # This class holds all configuration options the bot supports alongside
 # bot-wide constants.
@@ -34,6 +38,10 @@ class SukajanConfig(object):
 
         # Load config file.
         self.readconfig(path)
+
+        # Validate config.
+        if not self.__validateconfig():
+            raise ConfigError('\'.env\' file is malformed (missing or empty keys?).')
 
 
     def __del__(self):
@@ -98,6 +106,28 @@ class SukajanConfig(object):
 
         # Everything went well.
         logger.success('Successfully loaded global configuration.')
+
+
+    # Validates the dictionary generated from .env.
+    #
+    # Returns True if everything is okay, False if there
+    # is an issue.
+    def __validateconfig(self) -> bool:
+        # Test (1): Are all required keys present?
+        reqkeys = [
+            'name',  'prefix', 'tokenpath', 'reconnect',
+            'dbdir', 'dbfile', 'dbschemapath', 'moduledir'
+        ]
+        if not all(key in self._object for key in reqkeys):
+            return False
+
+        # Test (2): Check if any key is None or an empty string.
+        for value in self._object.values():
+            if value is None or value == '':
+                return False
+
+        # Everything seems to be alright.
+        return True
 
 
     # Writes the current configuration to the ".env" file.

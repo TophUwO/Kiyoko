@@ -12,9 +12,8 @@
 # This file serves as the main entry point for the application.
 
 # imports
-import logging
 import os
-import sys
+from loguru import logger
 
 import src.client as sj_client
 
@@ -25,7 +24,7 @@ if __name__ == '__main__':
         with sj_client.SukajanClient() as tmp_client:
             pass
     except Exception as tmp_e:
-        logging.critical(f'Fatal error: {tmp_e}')
+        logger.critical(tmp_e)
 
         os.abort()
 

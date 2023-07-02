@@ -26,11 +26,11 @@ import src.db as sj_db
 # This class reimplements certain aspects of the event handlers, etc.
 class SukajanClient(commands.Bot):
     def __init__(self) -> None:
-        # Load configuration file.
-        self.cfg = sj_cfg.SukajanConfig('conf/.env')
-        
         # Setup logging.
         self.__initlogging()
+
+        # Load configuration file.
+        self.cfg = sj_cfg.SukajanConfig('conf/.env')
 
         # Let discord.py do its default initialization.
         super().__init__(
@@ -45,8 +45,8 @@ class SukajanClient(commands.Bot):
 
         # Start the mainloop of the client.
         self.run(
-            token=self.cfg.getvalue('token', None),
-            reconnect=self.cfg.getvalue('reconnect', True)
+            token=self.cfg.getvalue('token'),
+            reconnect=bool(self.cfg.getvalue('reconnect', True))
         )
 
 
@@ -161,7 +161,7 @@ class SukajanClient(commands.Bot):
                     try:
                         await self.load_extension('src.modules.' + modname)
                     except Exception as tmp_e:
-                        logger.error(f'Failed to load module "{modname}".')
+                        logger.error(f'Failed to load module "{modname}". Reason: {tmp_e}')
 
                         continue
 
@@ -197,11 +197,11 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     def __initlogging(self) -> None:
         # Get required settings.
-        logdir = self.cfg.getvalue('logdir')
-        fname  = self.cfg.getvalue('logfilename')
-        fmt    = self.cfg.getvalue('logformat')
-        rot    = self.cfg.getvalue('logrotation')
-        ret    = self.cfg.getvalue('logretention')
+        logdir = 'logs'
+        fname  = 'log_{time:MM-DD-YYYY_HHmmss}.log'
+        fmt    = '[{time:MM-DD-YYYY HH:mm:ss}] <lvl>{level:<8}</> {module}: {message}'
+        rot    = '00:00'
+        ret    = '14 days'
 
         # Create 'log' directory if it does not exist.
         try:
