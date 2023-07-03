@@ -132,14 +132,17 @@ class KiyokoGlobalConfig(object):
     #
     # Returns True on success, False on failure.
     def writeconfig(self, fname: str) -> None:
-        if self._changed == False:
-            return
+        #if self._changed == False:
+        #    return
+
+        # Get length of longest key.
+        maxkey = max(len(key) for key in self._object.keys())
 
         # Write all values.
         try:
             with open(fname, 'w') as tmp_file:
                 for key, value in self._object.items():
-                    tmp_file.write(f'{key} = {value}\n')
+                    tmp_file.write(f'{key:<{maxkey}} = {value}\n')
         except:
             logger.error(f'Failed to write to configuration file \'{fname}\'.')
 
