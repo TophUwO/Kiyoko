@@ -1,13 +1,10 @@
 /*
-######################################################################
-# Project:    Sukajan Bot v0.1                                       #
-# File Name:  dbschema.sql                                           #
-# Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
-# Description:                                                       #
-#   a bot for for advanced custom moderation features                #
-#                                                                    #
-# (C) 2023 Sukajan One-Trick. All rights reserved.                   #
-######################################################################
+################################################################
+# Kiyoko - a multi-purpose discord application for moderation, #
+#          server automatization, and community engagement     #
+#                                                              #
+# (c) 2023 TophUwO All rights reserved.                        #
+################################################################
 */
 
 

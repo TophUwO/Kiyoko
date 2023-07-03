@@ -1,52 +1,56 @@
-######################################################################
-# Project:    Sukajan Bot v0.1                                       #
-# File Name:  init.py                                                #
-# Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
-# Description:                                                       #
-#   a bot for the KirikoMains subreddit for advanced custom          #
-#   features required by the moderation team                         #
-#                                                                    #
-# (C) 2023 Sukajan One-Trick. All rights reserved.                   #
-######################################################################
+################################################################
+# Kiyoko - a multi-purpose discord application for moderation, #
+#          server automatization, and community engagement     #
+#                                                              #
+# (c) 2023 TophUwO All rights reserved.                        #
+################################################################
 
-# This file implements the client.
+# app.py - main class, prepresenting application instance
 
 # imports
 import discord
+import discord.app_commands as app_commands
 import discord.ext.commands as commands
+import traceback
 import os
 import math
 import sys
 from loguru import logger
 
-import src.config as sj_cfg
-import src.db as sj_db
+import src.config as kiyo_cfg
+import src.db     as kiyo_db
+import src.module as kiyo_mod
 
 
 # This class reimplements certain aspects of the event handlers, etc.
-class SukajanClient(commands.Bot):
+class KiyokoApplication(commands.Bot):
     def __init__(self) -> None:
         # Setup logging.
         self.__initlogging()
 
-        # Load configuration file.
-        self.cfg = sj_cfg.SukajanConfig('conf/.env')
+        # Load global config.
+        self.cfg = kiyo_cfg.KiyokoGlobalConfig('conf/.env')
 
-        # Let discord.py do its default initialization.
+        # Initialize discord.py bot client.
         super().__init__(
-            command_prefix=self.cfg.getvalue('prefix', '/'),
-            intents=discord.Intents.all(),
-            help_command=None
+            command_prefix = self.cfg.getvalue('prefix'),
+            help_command   = None,
+            tree_cls       = app_commands.CommandTree,
+            description    = None,
+            intents        = discord.Intents().all()
         )
         self.gcfg = dict()
 
         # Establish database connection.
-        self._db = sj_db.SukajanDatabase(self.cfg)
+        self.dbman = kiyo_db.KiyokoDatabaseManager(self.cfg)
+
+        # Initialize module manager.
+        self.modman = kiyo_mod.KiyokoModuleManager(self)
 
         # Start the mainloop of the client.
         self.run(
-            token=self.cfg.getvalue('token'),
-            reconnect=bool(self.cfg.getvalue('reconnect', True))
+            token     = str(self.cfg.getvalue('token')),
+            reconnect = bool(self.cfg.getvalue('reconnect', True))
         )
 
 
@@ -59,13 +63,13 @@ class SukajanClient(commands.Bot):
         id = guild.id
 
         # Add guild info to the bots database.
-        self._db.execcommand(f'INSERT INTO guilds VALUES({id}, {guild.owner_id}, {ts})')
-        self._db.execcommand(f'INSERT INTO guildsettings (guildid) VALUES({id})')
-        self._db.flush()
+        self.dbman.execcommand(f'INSERT INTO guilds VALUES({id}, {guild.owner_id}, {ts})')
+        self.dbman.execcommand(f'INSERT INTO guildsettings (guildid) VALUES({id})')
+        self.dbman.flush()
 
         # Add guild info to dict.
-        tmp_ginfo = self._db.execquery(f'SELECT * FROM guildsettings WHERE guildid = \'{id}\'', 1)
-        self.gcfg[id] = sj_cfg.SukajanGuildConfig(tmp_ginfo)
+        tmp_ginfo = self.dbman.execquery(f'SELECT * FROM guildsettings WHERE guildid = \'{id}\'', 1)
+        self.gcfg[id] = kiyo_cfg.SukajanGuildConfig(tmp_ginfo)
 
 
     # Removes guild settings from the database.
@@ -73,9 +77,9 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     def __remguildsettings(self, guild: discord.Guild) -> None:
         # Remove guild info from the database.
-        self._db.execcommand(f'DELETE FROM guilds WHERE id={guild.id}')
-        self._db.execcommand(f'DELETE FROM guildsettings WHERE guildid={guild.id}')
-        self._db.flush()
+        self.dbman.execcommand(f'DELETE FROM guilds WHERE id={guild.id}')
+        self.dbman.execcommand(f'DELETE FROM guildsettings WHERE guildid={guild.id}')
+        self.dbman.flush()
 
         # Remove guild info from dict.
         self.gcfg.pop(guild.id)
@@ -86,8 +90,8 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     def __updguildsetting(self, guild: discord.Guild, field: str, value: any) -> None:
         # Update database setting.
-        self._db.execcommand(f'UPDATE guildsettings SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
-        self._db.flush()
+        self.dbman.execcommand(f'UPDATE guildsettings SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
+        self.dbman.flush()
         self.gcfg[guild.id].alias = value
 
         # Everything went well.
@@ -97,12 +101,12 @@ class SukajanClient(commands.Bot):
     # Fetches current guild settings in case they have updated while the bot was offline.
     #
     # Returns nothing.
-    def __fetchguildsettings(self, guild: discord.Guild) -> tuple[sj_cfg.SukajanGuildConfig, discord.Member]:
+    def __fetchguildsettings(self, guild: discord.Guild) -> tuple[kiyo_cfg.KiyokoGuildConfig, discord.Member]:
         # Get bot member.
         member = guild.get_member(self.user.id)
 
         # Get current guild settings.
-        return (sj_cfg.SukajanGuildConfig((
+        return (kiyo_cfg.KiyokoGuildConfig((
             None,
             None,
             member.nick,
@@ -125,7 +129,7 @@ class SukajanClient(commands.Bot):
     # Applies guild-specific member settings when the bot goes online.
     #
     # Returns nothing.
-    async def __applyguildsettings(self, guild: discord.Guild, settings: sj_cfg.SukajanGuildConfig) -> None:
+    async def __applyguildsettings(self, guild: discord.Guild, settings: kiyo_cfg.KiyokoGuildConfig) -> None:
         # Get bot member info and updated guild settings.
         info, member = self.__fetchguildsettings(guild)
 
@@ -145,58 +149,10 @@ class SukajanClient(commands.Bot):
         logger.success(f'Successfully applied settings for guild "{guild.name}" (id: {guild.id}).')
 
 
-    # Loads all extentions present.
-    #
-    # Returns nothing.
-    async def __loadextentions(self) -> None:
-        # Inject modules. Only attempt to load them if the path
-        # exists.
-        modpath = self.cfg.getvalue('moduledir')
-        if os.path.exists(modpath):
-            nextentions = 0
-
-            for fname in os.listdir(modpath):
-                if fname.endswith('.py'):
-                    modname = fname[:-3]
-                    try:
-                        await self.load_extension('src.modules.' + modname)
-                    except Exception as tmp_e:
-                        logger.error(f'Failed to load module "{modname}". Reason: {tmp_e}')
-
-                        continue
-
-                    logger.success(f'Successfully loaded module "{modname}".')
-                    nextentions += 1
-            logger.debug(f'Loaded {nextentions} modules.')
-        else:
-            logger.debug('No modules to load.')
-
-
-    # Syncs the command tree with all guilds the bot is connected
-    # to.
-    #
-    # Returns nothing.
-    async def __synccmdtree(self) -> None:
-        iserr = False
-        for guild in self.guilds:
-            try:
-                await self.tree.sync(guild=guild)
-            except Exception as tmp_e:
-                logger.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
-
-                iserr = True
-                continue
-
-        # Everything went well.
-        if not iserr:
-            logger.success('Successfully synced command tree to discord.')
-
-
     # Initializes the logging facility.
     #
     # Returns nothing.
     def __initlogging(self) -> None:
-        # Get required settings.
         logdir = 'logs'
         fname  = 'log_{time:MM-DD-YYYY_HHmmss}.log'
         fmt    = '[{time:MM-DD-YYYY HH:mm:ss}] <lvl>{level:<8}</> {module}: {message}'
@@ -227,9 +183,9 @@ class SukajanClient(commands.Bot):
     # Returns nothing.
     async def on_ready(self) -> None:
         # Load extentions.
-        await self.__loadextentions()
+        await self.modman.loadmodules()
         # Sync command tree.
-        await self.__synccmdtree()
+        await self.modman.synccmdtree()
 
         # Apply global settings.
         try:
@@ -243,10 +199,10 @@ class SukajanClient(commands.Bot):
         for tmp_guild in self.guilds:
             # Generate guild config object and put it into the dictionary.
             try:
-                ginfo = self._db.execquery(f'SELECT * from guildsettings WHERE guildid = \'{tmp_guild.id}\'', 1)
+                ginfo = self.dbman.execquery(f'SELECT * from guildsettings WHERE guildid = \'{tmp_guild.id}\'', 1)
 
                 # Store guild settings in dictionary (to reduce db calls)
-                self.gcfg[tmp_guild.id] = sj_cfg.SukajanGuildConfig(ginfo)
+                self.gcfg[tmp_guild.id] = kiyo_cfg.KiyokoGuildConfig(ginfo)
 
                 # Apply guild settings.
                 await self.__applyguildsettings(tmp_guild, self.gcfg[tmp_guild.id])
@@ -305,6 +261,14 @@ class SukajanClient(commands.Bot):
         # Ignore messages sent by bots.
         if message.author.bot:
             return
+
+    # This event handler is triggered whenever there is an exception
+    # thrown inside another event handler.
+    #
+    # Returns nothing.
+    async def on_error(self, event, *args, **kwargs) -> None:
+        # Just log the error using our logger for now.
+        logger.error(traceback.format_exc())
 
 
     # Reimplements the 'on_member_update' event handler.

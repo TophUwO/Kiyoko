@@ -1,20 +1,15 @@
-######################################################################
-# Project:    Sukajan Bot v0.1                                       #
-# File Name:  config.py                                              #
-# Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
-# Description:                                                       #
-#   a bot for the KirikoMains subreddit for advanced custom          #
-#   features required by the moderation team                         #
-#                                                                    #
-# (C) 2023 Sukajan One-Trick. All rights reserved.                   #
-######################################################################
+################################################################
+# Kiyoko - a multi-purpose discord application for moderation, #
+#          server automatization, and community engagement     #
+#                                                              #
+# (c) 2023 TophUwO All rights reserved.                        #
+################################################################
 
-# This file implements the config module, managing configuration resources
-# and constants.
+# config.py - managing global configuration
 
 # imports
-from loguru import logger
 import dotenv
+from loguru import logger
 
 
 # Raise this exception if the token is somehow invalid.
@@ -28,7 +23,7 @@ class ConfigError(Exception):
 
 # This class holds all configuration options the bot supports alongside
 # bot-wide constants.
-class SukajanConfig(object):
+class KiyokoGlobalConfig(object):
     def __init__(self, path: str):
         # Init attribs.
         self._changed = False
@@ -51,7 +46,7 @@ class SukajanConfig(object):
 
 
     # Retrieves a value from the internal settings object. If the key
-    # does not exist, return '*fallback*.
+    # does not exist, return *fallback*.
     #
     # Returns value associated with *key*, otherwise *fallback*.
     def getvalue(self, key: str, fallback: any = None) -> any:
@@ -122,8 +117,11 @@ class SukajanConfig(object):
             return False
 
         # Test (2): Check if any key is None or an empty string.
-        for value in self._object.values():
-            if value is None or value == '':
+        #           Allow non-required fields to be empty or None.
+        for key, value in self._object.items():
+            if not key in reqkeys:
+                continue
+            elif value is None or value == '':
                 return False
 
         # Everything seems to be alright.
@@ -153,9 +151,9 @@ class SukajanConfig(object):
 
 
 
-# This class, as opposed to SukajanConfig holds guild-specific
+# This class, as opposed to KiyokoGlobalConfig, holds guild-specific
 # configuration settings.
-class SukajanGuildConfig(object):
+class KiyokoGuildConfig(object):
     def __init__(self, settings: tuple):
         if settings is None:
             raise Exception('Invalid "settings" tuple.')

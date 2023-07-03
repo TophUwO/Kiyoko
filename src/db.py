@@ -1,22 +1,18 @@
-######################################################################
-# Project:    Sukajan Bot v0.1                                       #
-# File Name:  db.py                                                  #
-# Author:     Sukajan One-Trick <tophuwo01@gmail.com>                #
-# Description:                                                       #
-#   a bot for the KirikoMains subreddit for advanced custom          #
-#   features required by the moderation team                         #
-#                                                                    #
-# (C) 2023 Sukajan One-Trick. All rights reserved.                   #
-######################################################################
+################################################################
+# Kiyoko - a multi-purpose discord application for moderation, #
+#          server automatization, and community engagement     #
+#                                                              #
+# (c) 2023 TophUwO All rights reserved.                        #
+################################################################
 
 # This file implements the database connection and bookkeeping.
 
 # imports
-from loguru import logger
 import os
 import sqlite3
+from loguru import logger
 
-import src.config as sj_config
+import src.config as kiyo_cfg
 
 
 # Raise this exception if the database is in an invalid state.
@@ -25,8 +21,8 @@ class DatabaseStateError(Exception):
 
 
 # This class holds the database connection.
-class SukajanDatabase(object):
-    def __init__(self, cfg: sj_config.SukajanConfig):
+class KiyokoDatabaseManager(object):
+    def __init__(self, cfg: kiyo_cfg.KiyokoGlobalConfig):
         # Get required settings from config.
         dbdir    = cfg.getvalue('dbdir')
         dbpath   = dbdir + '/' + cfg.getvalue('dbfile')
@@ -41,7 +37,7 @@ class SukajanDatabase(object):
 
             self.__createdb(dbpath, dbschema, direxists, dbdir)
         else:
-            logger.debug(f'Found database file: "{dbpath}".')
+            logger.debug(f'Found database file: \'{dbpath}\'.')
 
         # Establish connection. If this fails, an exception will be raised.
         try:
