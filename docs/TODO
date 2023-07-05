@@ -8,5 +8,6 @@
 --- add .env validator
 - add status per guild (command) (any guild-specific errors) (possibly add command for global errors)
 --- add check for required modules
-- format .env prettier (get longest key, and pad everything)
+--- format .env prettier (get longest key, and pad everything)
 - allow loading extentions recursively
+- add way to check for updates

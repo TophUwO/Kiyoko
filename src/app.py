@@ -8,13 +8,11 @@
 # app.py - main class, prepresenting application instance
 
 # imports
+import sys, math, os, traceback
 import discord
 import discord.app_commands as app_commands
 import discord.ext.commands as commands
-import traceback
-import os
-import math
-import sys
+
 from loguru import logger
 
 import src.config as kiyo_cfg
@@ -57,29 +55,31 @@ class KiyokoApplication(commands.Bot):
     # Adds guild settings to the database.
     #
     # Returns nothing.
-    def __addguildsettings(self, guild: discord.Guild) -> None:
+    async def __addguildsettings(self, guild: discord.Guild):
         # Convert 'created_at' time to UNIX timestamp (epoch).
         ts = math.floor(guild.created_at.timestamp())
         id = guild.id
 
         # Add guild info to the bots database.
-        self.dbman.execcommand(f'INSERT INTO guilds VALUES({id}, {guild.owner_id}, {ts})')
-        self.dbman.execcommand(f'INSERT INTO guildsettings (guildid) VALUES({id})')
-        self.dbman.flush()
-
+        conn = await self.dbman.newconn()
+        await self.dbman.execcommand(conn, f'INSERT INTO guilds VALUES({id}, {guild.owner_id}, 0, 0)')
+        #await self.dbman.execcommand(tmp_conn, f'INSERT INTO guildsettings (guildid) VALUES({id})')
+        await conn.commit()
+        await conn.close()
         # Add guild info to dict.
-        tmp_ginfo = self.dbman.execquery(f'SELECT * FROM guildsettings WHERE guildid = \'{id}\'', 1)
-        self.gcfg[id] = kiyo_cfg.SukajanGuildConfig(tmp_ginfo)
+        #tmp_ginfo = await self.dbman.execquery(tmp_conn, f'SELECT * FROM guildsettings WHERE guildid = \'{id}\'', 1)
 
 
     # Removes guild settings from the database.
     #
     # Returns nothing.
-    def __remguildsettings(self, guild: discord.Guild) -> None:
+    async def __remguildsettings(self, guild: discord.Guild):
         # Remove guild info from the database.
-        self.dbman.execcommand(f'DELETE FROM guilds WHERE id={guild.id}')
-        self.dbman.execcommand(f'DELETE FROM guildsettings WHERE guildid={guild.id}')
-        self.dbman.flush()
+        async with self.dbman.newconn() as tmp_conn:
+            await self.dbman.execcommand(tmp_conn, f'DELETE FROM guilds WHERE id={guild.id}')
+            await self.dbman.execcommand(tmp_conn, f'DELETE FROM guildsettings WHERE guildid={guild.id}')
+
+            await tmp_conn.commit()
 
         # Remove guild info from dict.
         self.gcfg.pop(guild.id)
@@ -88,10 +88,14 @@ class KiyokoApplication(commands.Bot):
     # Updates one specific guild setting.
     #
     # Returns nothing.
-    def __updguildsetting(self, guild: discord.Guild, field: str, value: any) -> None:
+    async def __updguildsetting(self, guild: discord.Guild, field: str, value: any):
         # Update database setting.
-        self.dbman.execcommand(f'UPDATE guildsettings SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
-        self.dbman.flush()
+        async with self.dbman.newconn() as tmp_conn:
+            await self.dbman.execcommand(tmp_conn, f'UPDATE guildsettings SET {field} = \'{value}\' WHERE guildid = \'{guild.id}\'')
+
+            await tmp_conn.commit()
+
+        # Update value in cache.
         self.gcfg[guild.id].alias = value
 
         # Everything went well.
@@ -118,9 +122,11 @@ class KiyokoApplication(commands.Bot):
     # Applies global settings on startup.
     #
     # Returns nothing.
-    async def __applyglobalsettings(self) -> None:
+    async def __applyglobalsettings(self):
         # Apply global bot account settings.
-        await self.user.edit(username=self.cfg.getvalue('name'))
+        nname = self.cfg.getvalue('name')
+        if self.user.name != nname:
+            await self.user.edit(username=nname)
 
         # Everything went well.
         logger.success('Successfully applied global settings.')
@@ -137,7 +143,7 @@ class KiyokoApplication(commands.Bot):
         # If member nick has changed, update it first.
         try:
             if settings.alias != info.alias and info.alias is not None:
-                self.__updguildsetting(guild, 'alias', info.alias)
+                await self.__updguildsetting(guild, 'alias', info.alias)
 
                 await member.edit(nick=info.alias)
         except Exception as tmp_e:
@@ -199,23 +205,25 @@ class KiyokoApplication(commands.Bot):
         for tmp_guild in self.guilds:
             # Generate guild config object and put it into the dictionary.
             try:
-                ginfo = self.dbman.execquery(f'SELECT * from guildsettings WHERE guildid = \'{tmp_guild.id}\'', 1)
-
+                conn  = await self.dbman.newconn()
+                ginfo = await self.dbman.execquery(conn, f'SELECT * from guildsettings WHERE guildid = \'{tmp_guild.id}\'', 1)
+                await conn.close()
                 # Store guild settings in dictionary (to reduce db calls)
-                self.gcfg[tmp_guild.id] = kiyo_cfg.KiyokoGuildConfig(ginfo)
+                #self.gcfg[tmp_guild.id] = kiyo_cfg.KiyokoGuildConfig(ginfo)
 
                 # Apply guild settings.
+                await self.__addguildsettings(tmp_guild)
                 await self.__applyguildsettings(tmp_guild, self.gcfg[tmp_guild.id])
             except Exception as tmp_e:
-                logger.error(f'Could not load configuration for guild {tmp_guild.name} (id: {tmp_guild.id}). Desc: {tmp_e}')
+                logger.error(f'Could not load configuration for guild \'{tmp_guild.name}\' (id: {tmp_guild.id}). Desc: {tmp_e}')
 
                 continue
 
             # Everything went well for this guild.
-            logger.info(f'Successfully loaded configuration for guild "{tmp_guild.name}" (id: {tmp_guild.id}).')
+            logger.info(f'Successfully loaded configuration for guild \'{tmp_guild.name}\' (id: {tmp_guild.id}).')
 
         # We are done setting things up and are now ready.
-        logger.info(f'SukajanBot is now available as "{self.user}". Ready.')
+        logger.info(f'SukajanBot is now available as \'{self.user}\'. Ready.')
 
 
     # Reimplements the 'on_create' event handler.
@@ -227,7 +235,7 @@ class KiyokoApplication(commands.Bot):
     async def on_guild_join(self, guild: discord.Guild) -> None:
         # Add guild settings to database and flush cache.
         try:
-            self.__addguildsettings(guild)
+            await self.__addguildsettings(guild)
         except Exception as tmp_e:
             logger.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
@@ -246,7 +254,7 @@ class KiyokoApplication(commands.Bot):
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         # Remove guild info from the database.
         try:
-            self.__remguildsettings(guild)
+            await self.__remguildsettings(guild)
         except Exception as tmp_e:
             logger.error(f'Failed to add guild settings for guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 
@@ -261,6 +269,7 @@ class KiyokoApplication(commands.Bot):
         # Ignore messages sent by bots.
         if message.author.bot:
             return
+
 
     # This event handler is triggered whenever there is an exception
     # thrown inside another event handler.
@@ -283,7 +292,7 @@ class KiyokoApplication(commands.Bot):
 
             # Update guild settings for current guild.
             try:
-                self.__updguildsetting(guild, 'alias', nnick)
+                await self.__updguildsetting(guild, 'alias', nnick)
             except Exception as tmp_e:
                 logger.info(f'Failed to update guild setting "alias" for guild {guild.name} (id: {guild.id}). Desc: {tmp_e}')
 
