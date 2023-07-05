@@ -8,10 +8,12 @@
 # app.py - main class, prepresenting application instance
 
 # imports
-import sys, math, os, traceback
+import sys, math, os, traceback, configparser
 import discord
 import discord.app_commands as app_commands
 import discord.ext.commands as commands
+import urllib.request       as req
+import distutils.version    as vcmp
 
 from loguru import logger
 
@@ -28,6 +30,13 @@ class KiyokoApplication(commands.Bot):
 
         # Load global config.
         self.cfg = kiyo_cfg.KiyokoGlobalConfig('conf/.env')
+
+        # Check for new version.
+        self._nver = self.getlatestversion()
+        self._cver = self.getvalue('version')
+        if self._nver[0]:
+            logger.info(f'A new version of Kiyoko is available: {self._nver[1]}')
+        logger.info(f'Current Kiyoko version: {self._cver}')
 
         # Initialize discord.py bot client.
         super().__init__(
@@ -301,5 +310,29 @@ class KiyokoApplication(commands.Bot):
             # Everything went well.
             isdef = ' (default)' if after.nick is None else ''
             logger.info(f'Updated nickname for guild "{guild.name}" (id: {guild.id}) from "{before.nick}" to "{nnick}"{isdef}.')
+
+
+    # Checks for a new version by searching the official repository's 'env' file.
+    #
+    # Returns a tuple containing the latest version and a boolean value describing
+    # whether the version found is newer than the version of this application.
+    def getlatestversion(self) -> tuple[bool, str]:
+        # Get required data.
+        nver = ''
+        cver = self.cfg.getvalue('version')
+        url  = 'https://raw.githubusercontent.com/TophUwO/Kiyoko/master/conf/.env'
+
+        # Get the latest '.env' file containing the version number of the current
+        # 'master' branch.
+        with req.urlopen(url) as tmp_file:
+            cfg  = configparser.ConfigParser().read_string(tmp_file.read())
+            nver = cfg['version']
+
+        # Return latest version and whether the current version is
+        # outdated.
+        return (
+            vcmp.StrictVersion(nver) > vcmp.StrictVersion(cver),
+            nver
+        )
 
 

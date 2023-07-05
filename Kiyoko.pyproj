@@ -25,7 +25,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="conf\" />
-    <Folder Include="docs\" />
     <Folder Include="src\" />
     <Folder Include="src\modules\" />
     <Folder Include="src\sql\" />
@@ -41,8 +40,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="conf\.env" />
-    <Content Include="docs\TODO" />
-    <Content Include="docs\VERSION" />
     <Content Include="src\sql\dbschema.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
