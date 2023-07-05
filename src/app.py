@@ -325,8 +325,8 @@ class KiyokoApplication(commands.Bot):
         # Get the latest '.env' file containing the version number of the current
         # 'master' branch.
         with req.urlopen(url) as tmp_file:
-            cfg  = configparser.ConfigParser().read_string(tmp_file.read())
-            nver = cfg['version']
+            cfg  = configparser.ConfigParser().read_string(tmp_file.read().decode('utf-8'))
+            nver = cfg['global']['version']
 
         # Return latest version and whether the current version is
         # outdated.
