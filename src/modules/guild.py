@@ -18,6 +18,13 @@ from loguru import logger
 import src.module as kiyo_mod
 
 
+# This is a special value for 'updgentry()' signifying that
+# no update should be carried out. Use an UUIDv4 to at least
+# most likely be unique.
+# Yes, I know this is stupid as f*ck.
+SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
+
+
 # Updates a guild entry linked to a specified guild.
 #
 # Returns nothing.
@@ -31,6 +38,10 @@ async def updgentry(app, gid: int, values: list[tuple[str, any]], conn = None, c
 
     # Execute 'UPDATE'.
     for field, nval in values:
+        # Do not carry out the update in case of nval == SQL_NO_UPD.
+        if str(nval) == SQL_NO_UPD:
+            continue
+
         # Allow writing NULL to a field by specifying 'NoneType' as the new value.
         # All other values are passed as strings and subsequently converted to the
         # column datatype.
@@ -61,11 +72,23 @@ async def addgentry(app, gid: int, conn = None, cur = None) -> None:
     await cur.execute(f'SELECT id, left FROM guilds WHERE id = {gid}')
     res = await cur.fetchone()
     if res is not None:
+        # Get current time (UNIX epoch).
+        tnow = int(time.time())
+        
+        # Update database entry for the given guild.
         await updgentry(
             app,
             gid,
-            [('left', None)]
+            [('joined', tnow), ('left', None)],
+            conn,
+            cur
         )
+
+        # Flush db and clean up.
+        if istmp:
+            await cur.close()
+            await conn.commit()
+            await conn.close()
 
         return
 
@@ -139,8 +162,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         # Add basic guild data.
-        conn, cur = await self._app.dbman.newconn()
-        await addgentry(self._app, guild.id, conn, cur)
+        await addgentry(self._app, guild.id)
 
         # Everything went well.
         logger.info(f'Joined guild \'{guild.name}\' (id: {guild.id}).')
@@ -155,14 +177,14 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
     # Returns nothing.
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
-        # Get current time.
-        val = int(time.time())
+        # Get current time (UNIX epoch).
+        tnow = int(time.time())
 
         # Mark guild as left.
         await updgentry(
             self._app,
             guild.id,
-            [('left', val)]
+            [('left', tnow)]
         )
 
         # Everything went well.
@@ -230,10 +252,10 @@ async def syncdb(app) -> None:
     #     (3) The 'left' field is non-NULL for a guild in app.guilds => app REJOINED guild while bot offline.
     #
     # Notes:
-    #     (1) Technically, (1) can also mean a rejoin as guild settings are removed 90 days after the 'left'
+    #     (i) Technically, (1) can also mean a rejoin as guild settings are removed 90 days after the 'left'
     #         field for that guild had been (last) set. Thus, if the guild settings are gone, it will appear
     #         to the bot as if it joined the guild for the first time.
-    clist =  [(elem, 1) for elem in glist - ilist]
+    clist  = [(elem, 1) for elem in glist - ilist]
     clist += [(elem, 2) for elem in ilist - glist if (elem, None) in qlist]
     clist += [(elem, 3) for elem in glist & ilist if (elem, None) not in qlist]
 
@@ -247,13 +269,15 @@ async def syncdb(app) -> None:
                 # Case (2) or (3): UPDATE guild info.
                 #
                 # Notes:
-                #     (1) Because we do not know for certain WHEN the app left the guild,
+                #     (i) Because we do not know for certain WHEN the app left the guild,
                 #         we use the current time as the time of leaving.
-                val = int(time.time()) if action == 2 else None
+                tnow = int(time.time())
+                jval = tnow if action == 3 else SQL_NO_UPD
+                lval = tnow if action == 2 else None
                 await updgentry(
                     app,
                     gid,
-                    [('left', val)],
+                    [('joined', jval), ('left', lval)],
                     conn,
                     cur
                 )

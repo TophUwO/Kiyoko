@@ -93,4 +93,3 @@ class KiyokoDatabaseManager(object):
         logger.success(f'Successfully created database \'{self._path}\'.')
 
 
-

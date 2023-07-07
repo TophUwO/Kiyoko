@@ -4,12 +4,13 @@
 --- implement a way to clear the logs directory if a specific limit has been reached
 --- separate token from .env file so that the global settings can be included in the repo
 - rewamp guild config object so it's also a dict
+- update 'joined' on rejoin?
 --- put guild-related events in its own 'guild' module
 --- add .env validator
-- add status per guild (command) (any guild-specific errors) (possibly add command for global errors)
 --- add check for required modules
 --- format .env prettier (get longest key, and pad everything)
 - allow loading extentions recursively
 --- add way to check for updates
-- update 'joined' on rejoin?
 --- *gentry() should require a preestablished connection, cursor
+
+- add status per guild (command) (any guild-specific errors) (possibly add command for global errors)

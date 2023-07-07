@@ -9,6 +9,7 @@
 
 # imports
 import dotenv
+
 from loguru import logger
 
 
@@ -151,24 +152,5 @@ class KiyokoGlobalConfig(object):
         # Everything went well.
         self._changed = False
         logger.success('Successfully wrote global configuration to file.')
-
-
-
-# This class, as opposed to KiyokoGlobalConfig, holds guild-specific
-# configuration settings.
-class KiyokoGuildConfig(object):
-    def __init__(self, settings: tuple):
-        if settings is None:
-            raise Exception('Invalid "settings" tuple.')
-
-        # Settings are provided in this order: (guildid, prefix, alias, logchan, welcomechan, goodbyechan, sendwelcome, sendgoodbye).
-        self.id          = int(settings[0])
-        self.pre         = settings[1]
-        self.alias       = settings[2]
-        self.logchan     = settings[3]
-        self.welcomechan = settings[4]
-        self.goodbyechan = settings[5]
-        self.sendwelcome = int(settings[6])
-        self.sendgoodbye = int(settings[7])
 
 
