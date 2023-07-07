@@ -17,10 +17,9 @@ import distutils.version    as vcmp
 
 from loguru import logger
 
-import src.config as kiyo_cfg
-import src.db     as kiyo_db
-import src.module as kiyo_mod
-
+import src.config        as kiyo_cfg
+import src.db            as kiyo_db
+import src.module        as kiyo_mod
 import src.modules.guild as kiyo_mguild
 
 
@@ -49,14 +48,14 @@ class KiyokoApplication(commands.Bot):
             description    = None,
             intents        = discord.Intents().all()
         )
-        self.gcfg  = dict()
         self.lmods = False
 
         # Establish database connection.
         self.dbman = kiyo_db.KiyokoDatabaseManager(self.cfg)
-
         # Initialize module manager.
         self.modman = kiyo_mod.KiyokoModuleManager(self)
+        # Initialize guild settings manager.
+        self.gcman  = kiyo_mguild.KiyokoGuildConfigManager(self)
 
         # Start the mainloop of the client.
         self.run(
@@ -106,9 +105,10 @@ class KiyokoApplication(commands.Bot):
 
         # Sync command tree.
         await self.modman.synccmdtree()
-
         # Sync database.
         await kiyo_mguild.syncdb(self)
+        # Load guild configs.
+        await self.gcman.loadgconfig()
 
         ## We are done setting things up and are now ready.
         logger.info(f'Kiyoko is now available as \'{self.user}\'. Ready.')

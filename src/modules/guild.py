@@ -13,7 +13,8 @@ import discord
 import discord.ext.commands as commands
 import discord.ext.tasks    as tasks
 
-from loguru import logger
+from loguru      import logger
+from dataclasses import dataclass
 
 import src.module as kiyo_mod
 
@@ -24,6 +25,56 @@ import src.module as kiyo_mod
 # most likely be unique.
 # Yes, I know, this is stupid as f*ck.
 SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
+
+
+
+# data class holding guild-related configuration
+@dataclass
+class KiyokoGuildConfig:
+    gid:     int
+    alias:   str
+    logchan: int
+
+
+# class for managing the guild config objects
+class KiyokoGuildConfigManager(object):
+    def __init__(self, app):
+        self._dict = dict()
+        self._app  = app
+
+
+    # Retrieves a guild settings object from the internal dictionary.
+    # If the guild id cannot be found, the function returns None.
+    #
+    # Returns guild settings object.
+    def getgconfig(self, gid: int) -> KiyokoGuildConfig:
+        return self._dict.get(gid, None)
+
+
+    # Loads all guild-related configuration (i.e. 'guildsettings') into a dictionary of
+    # data classes, indexed by the guild id.
+    # This function can also be used to reload the config from the database in case it
+    # has been updated.
+    #
+    # Returns nothing.
+    async def loadgconfig(self) -> None:
+        # Load guild configs for all guilds the client is connected to.
+        conn, cur = await self._app.dbman.newconn()
+        await cur.execute(f'''SELECT gs.* FROM guildsettings gs INNER JOIN guilds g ON gs.guildid = g.id WHERE g.left IS NULL''')
+        qres = await cur.fetchall()
+    
+        # Generate guild config objects and save them in the dictionary.
+        for row in qres:
+            # Unpack tuple.
+            (gid, alias, logchan) = row
+    
+            # Add generated object to dict with the guild id as key.
+            self._dict[gid] = KiyokoGuildConfig(gid, alias, logchan)
+    
+        # Clean up.
+        await cur.close()
+        await conn.close()
+
 
 
 # Updates a guild entry linked to a specified guild.
