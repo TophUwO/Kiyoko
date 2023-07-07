@@ -49,26 +49,12 @@ class KiyokoDatabaseManager(object):
 
     # Opens a new connection to the internal database.
     #
-    # Returns connection object.
-    async def newconn(self) -> aiosqlite.Connection:
-        return await aiosqlite.connect(self._path)
+    # Returns connection object and a cursor.
+    async def newconn(self) -> tuple[aiosqlite.Connection, aiosqlite.Cursor]:
+        conn = await aiosqlite.connect(self._path)
+        cur  = await conn.cursor()
 
-
-    # Executes an SQL command with no return value.
-    #
-    # Returns nothing.
-    async def execcommand(self, conn: aiosqlite.Connection, cmd: str, flush: bool = False) -> None:
-        await self.__execquery(conn, cmd, 0, 0)
-
-        if flush:
-            await conn.commit()
-
-
-    # Executes an SQL query.
-    #
-    # Returns query result.
-    async def execquery(self, conn: aiosqlite.Connection, cmd: str, n: int) -> any:
-        return await self.__execquery(conn, cmd, n, 1)
+        return (conn, cur)
 
 
     # Create the database structure using a specified schema.
@@ -102,37 +88,9 @@ class KiyokoDatabaseManager(object):
             raise
 
         # If everything went well, we should arrive here.
+        conn.commit()
         conn.close()
         logger.success(f'Successfully created database \'{self._path}\'.')
 
-
-    # Executes a query on behalf of the client.
-    # n:
-    #     0  - fetch all
-    #     1  - fetch one
-    #     x  - fetch many
-    #
-    # Returns nothing, but throws an exception in case of an
-    # error.
-    async def __execquery(self, conn: aiosqlite.Connection, cmd: str, n: int = 0, mode: int = 0) -> list:
-        if conn is None:
-            raise DatabaseConnectionError
-
-        # Execute command.
-        await conn.execute(cmd)
-        cur = await conn.cursor()
-
-        # Fetch results from db.
-        tmp_res = None
-        if n < 0:
-            return None
-        match n:
-            case 0: tmp_res = await cur.fetchall()
-            case 1: tmp_res = await cur.fetchone()
-            case _: tmp_res = await cur.fetchmany(n)
-
-        # Close cursor and return result.
-        await cur.close()
-        return None if mode == 0 else tmp_res
 
 

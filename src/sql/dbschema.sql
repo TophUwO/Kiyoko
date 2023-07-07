@@ -15,7 +15,6 @@ PRAGMA encoding = 'UTF-8';
 -- guilds (servers).
 CREATE TABLE guilds (
     id      INTEGER  NOT NULL, -- guild id (pk)
-    ownerid INTEGER  NOT NULL, -- id of guild owner
     joined  INTEGER  NOT NULL, -- UNIX timestamp of the time the bot joined the guild
     left    INTEGER,           -- UNIX timestamp of the time the bot (last) left the server
 
