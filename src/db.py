@@ -15,19 +15,21 @@ from loguru import logger
 import src.config as kiyo_cfg
 
 
+
 # Raise this exception if the database is in an invalid state.
 class DatabaseConnectionError(Exception):
     def __init__(self):
         self.message = 'Invalid database connection object.'
 
 
+
 # This class holds the database connection.
 class KiyokoDatabaseManager(object):
     def __init__(self, cfg: kiyo_cfg.KiyokoGlobalConfig):
         # Get required settings from config.
-        dbdir    = cfg.getvalue('dbdir')
-        dbpath   = dbdir + '/' + cfg.getvalue('dbfile')
-        dbschema = cfg.getvalue('dbschemapath')
+        dbdir    = cfg.getvalue('global', 'dbdir')
+        dbpath   = dbdir + '/' + cfg.getvalue('global', 'dbfile')
+        dbschema = cfg.getvalue('global', 'dbschemapath')
 
         # Init attributes.
         self._path = dbpath

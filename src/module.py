@@ -13,6 +13,7 @@ import discord.ext.commands as commands
 from loguru import logger
 
 
+
 # Raise this exception if required modules could not be
 # loaded.
 class RequiredModuleError(Exception):
@@ -25,6 +26,7 @@ class RequiredModuleError(Exception):
 class KiyokoModule_Base(commands.Cog):
     def __init__(self, app):
         self._app = app
+
 
 
 # class representing the module manager, handles (un-)loading of modules
@@ -55,8 +57,8 @@ class KiyokoModuleManager(object):
 
         # Obtain required config.
         modext    = '.py'
-        moddir    = self._app.cfg.getvalue('moduledir')
-        reqmods   = self._app.cfg.getvalue('reqmodules', '').split(',')
+        moddir    = self._app.cfg.getvalue('global', 'moduledir')
+        reqmods   = self._app.cfg.getvalue('global', 'reqmodules', '').split(',')
         moddirfmt = (moddir + '.').replace('/', '.')
 
         # Strip list elements of any trailing spaces, so that 'x, y' is also
@@ -108,7 +110,7 @@ class KiyokoModuleManager(object):
         iserr = False
         for guild in self._app.guilds:
             try:
-                await self._app.tree.sync(guild=guild)
+                await self._app.tree.sync(guild = guild)
             except Exception as tmp_e:
                 logger.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
 

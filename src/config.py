@@ -8,18 +8,20 @@
 # config.py - managing global configuration
 
 # imports
-import dotenv
+import configparser
 
 from loguru import logger
+
 
 
 # Raise this exception if the token is somehow invalid.
 class TokenError(Exception):
     pass
 
-# Raise this exception if there are keys missing in the .env file.
+# Raise this exception if there are keys missing in the config file.
 class ConfigError(Exception):
     pass
+
 
 
 # This class holds all configuration options the bot supports alongside
@@ -28,9 +30,9 @@ class KiyokoGlobalConfig(object):
     def __init__(self, path: str):
         # Init attribs.
         self._changed = False
-        self._object  = dict()
         self._token   = ''
         self._path    = path
+        self._parser  = configparser.ConfigParser() 
 
         # Load config file.
         self.readconfig(path)
@@ -46,15 +48,15 @@ class KiyokoGlobalConfig(object):
             self.writeconfig(self._path)
 
 
-    # Retrieves a value from the internal settings object. If the key
+    # Retrieves a value from the internal settings object. If the path
     # does not exist, return *fallback*.
     #
     # Returns value associated with *key*, otherwise *fallback*.
-    def getvalue(self, key: str, fallback: any = None) -> any:
-        if key == 'token':
+    def getvalue(self, section: str, key: str, fallback: any = None) -> any:
+        if section is None and key == 'token':
             return self._token
 
-        return self._object.get(key, fallback)
+        return self._parser.get(section, key, fallback = fallback)
 
     
     # Updates the configuration of the given *key* with *value*.
@@ -62,13 +64,13 @@ class KiyokoGlobalConfig(object):
     # not exist previously, the function returns None.
     #
     # Returns old value.
-    def setvalue(self, key: str, value: any) -> any:
+    def setvalue(self, section: str, key: str, value: any) -> any:
         # Get old value.
-        oldval = self._object.get(key, None)
+        oldval = self.getvalue(section, key)
 
         # Update value and internal state.
-        self._object[key] = value
-        self._changed     = True
+        self._parser.set(section, key, str(value))
+        self._changed = True
 
         return oldval
 
@@ -80,14 +82,14 @@ class KiyokoGlobalConfig(object):
     def readconfig(self, fname: str) -> None:
         # Load global settings.
         try:
-            self._object = dotenv.dotenv_values(fname)
+            self._parser.read(fname)
         except:
-            logger.error(f'Failed to read global configuration from \'{fname}\' file.')
+            logger.error(f'Failed to read global configuration from \'{fname}\'.')
 
             raise
 
         # Load token.
-        tokenpath = self.getvalue('tokenpath') 
+        tokenpath = self.getvalue('global', 'tokenpath') 
         try:
             with open(tokenpath, 'r') as tmp_tfile:
                 self._token = tmp_tfile.read()
@@ -109,21 +111,28 @@ class KiyokoGlobalConfig(object):
     # Returns True if everything is okay, False if there
     # is an issue.
     def __validateconfig(self) -> bool:
-        # Test (1): Are all required keys present?
+        # Test (1): Is the 'global' section present?
+        if not self._parser.has_section('global'):
+            return False
+
+        # Test (2): Are all required keys present in section 'general'?
         reqkeys = [
             'name',  'prefix', 'tokenpath', 'reconnect',
             'dbdir', 'dbfile', 'dbschemapath', 'moduledir'
         ]
-        if not all(key in self._object for key in reqkeys):
+        if not all(key in self._parser['global'] for key in reqkeys):
             return False
 
-        # Test (2): Check if any key is None or an empty string.
+        # Test (3): Check if any key is None or an empty string.
         #           Allow non-required fields to be empty or None.
-        for key, value in self._object.items():
-            if not key in reqkeys:
+        for opt in self._parser['global']:
+            if not opt in reqkeys:
                 continue
-            elif value is None or value == '':
-                return False
+            else:
+                val = self.getvalue('global', opt)
+
+                if val is None or val == '':
+                    return False
 
         # Everything seems to be alright.
         return True
@@ -133,17 +142,13 @@ class KiyokoGlobalConfig(object):
     #
     # Returns True on success, False on failure.
     def writeconfig(self, fname: str) -> None:
-        #if self._changed == False:
-        #    return
-
-        # Get length of longest key.
-        maxkey = max(len(key) for key in self._object.keys())
+        if self._changed == False:
+            return
 
         # Write all values.
         try:
             with open(fname, 'w') as tmp_file:
-                for key, value in self._object.items():
-                    tmp_file.write(f'{key:<{maxkey}} = {value}\n')
+                self._parser.write(tmp_file)
         except:
             logger.error(f'Failed to write to configuration file \'{fname}\'.')
 

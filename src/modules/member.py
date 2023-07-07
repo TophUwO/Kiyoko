@@ -15,6 +15,7 @@ from loguru import logger
 import src.app as kiyo_app
 
 
+
 # 'member' module class
 class KiyokoModule_Member(commands.Cog):
     def __init__(self, app: kiyo_app.KiyokoApplication):
@@ -38,6 +39,7 @@ class KiyokoModule_Member(commands.Cog):
         chan = member.guild.get_channel(chanid)
         user = self._app.get_user(member.id)
         await chan.send(f'Welcome to *{member.guild.name}*, **{user.name}**!')
+
 
 
 # module entrypoint

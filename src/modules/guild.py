@@ -18,10 +18,11 @@ from loguru import logger
 import src.module as kiyo_mod
 
 
+
 # This is a special value for 'updgentry()' signifying that
 # no update should be carried out. Use an UUIDv4 to at least
 # most likely be unique.
-# Yes, I know this is stupid as f*ck.
+# Yes, I know, this is stupid as f*ck.
 SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 
 
@@ -143,6 +144,7 @@ async def remgentries(app, gids: list[int], conn = None, cur = None) -> None:
         await cur.close()
         await conn.commit()
         await conn.close()
+
 
 
 # Cog defining guild-related functionality

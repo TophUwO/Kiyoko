@@ -14,6 +14,7 @@ from loguru import logger
 import src.app as kiyo_app
 
 
+
 # Start main loop.
 if __name__ == '__main__':
     try:

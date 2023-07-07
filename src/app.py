@@ -24,6 +24,7 @@ import src.module as kiyo_mod
 import src.modules.guild as kiyo_mguild
 
 
+
 # This class reimplements certain aspects of the event handlers, etc.
 class KiyokoApplication(commands.Bot):
     def __init__(self) -> None:
@@ -35,14 +36,14 @@ class KiyokoApplication(commands.Bot):
 
         # Check for new version.
         self._nver = self.getlatestversion()
-        self._cver = self.cfg.getvalue('version')
+        self._cver = self.cfg.getvalue('global', 'version')
         if self._nver[0]:
             logger.warning(f'A new version of Kiyoko is available: {self._nver[1]}')
         logger.info(f'Current Kiyoko version: {self._cver}')
 
         # Initialize discord.py bot client.
         super().__init__(
-            command_prefix = self.cfg.getvalue('prefix'),
+            command_prefix = self.cfg.getvalue('global', 'prefix'),
             help_command   = None,
             tree_cls       = app_commands.CommandTree,
             description    = None,
@@ -59,8 +60,8 @@ class KiyokoApplication(commands.Bot):
 
         # Start the mainloop of the client.
         self.run(
-            token     = str(self.cfg.getvalue('token')),
-            reconnect = bool(self.cfg.getvalue('reconnect', True))
+            token     = str(self.cfg.getvalue(None, 'token')),
+            reconnect = bool(self.cfg.getvalue('global', 'reconnect', True))
         )
 
 
@@ -129,7 +130,7 @@ class KiyokoApplication(commands.Bot):
     def getlatestversion(self) -> tuple[bool, str]:
         # Get required data.
         nver = ''
-        cver = self.cfg.getvalue('version')
+        cver = self.cfg.getvalue('global', 'version')
         url  = 'https://raw.githubusercontent.com/TophUwO/Kiyoko/master/conf/.env'
 
         # Get the latest '.env' file containing the version number of the current
