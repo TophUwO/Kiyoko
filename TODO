@@ -13,4 +13,5 @@
 --- add way to check for updates
 --- *gentry() should require a preestablished connection, cursor
 
+- REMOVE 'alias' column
 - add status per guild (command) (any guild-specific errors) (possibly add command for global errors)

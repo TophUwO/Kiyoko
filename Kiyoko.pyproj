@@ -34,6 +34,7 @@
     <Compile Include="src\db.py" />
     <Compile Include="src\config.py" />
     <Compile Include="src\module.py" />
+    <Compile Include="src\modules\admin.py" />
     <Compile Include="src\modules\guild.py" />
     <Compile Include="src\modules\member.py" />
     <Compile Include="main.py" />

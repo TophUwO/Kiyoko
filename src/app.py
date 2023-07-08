@@ -103,8 +103,6 @@ class KiyokoApplication(commands.Bot):
 
             self.lmods = True
 
-        # Sync command tree.
-        await self.modman.synccmdtree()
         # Sync database.
         await kiyo_mguild.syncdb(self)
         # Load guild configs.

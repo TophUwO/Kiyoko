@@ -11,8 +11,6 @@
 import discord
 import discord.ext.commands as commands
 
-from loguru import logger
-
 import src.module as kiyo_mod
 
 
@@ -26,17 +24,6 @@ class KiyokoModule_Member(kiyo_mod.KiyokoModule_Base):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         pass
-        # Check if welcome channel is configured and the setting is enabled.
-        #chanid = int(self._app.gcfg[member.guild.id].welcomechan)
-        #if chanid is None:
-        #    logger.warning(f'Welcome channel for guild "{member.guild.name}" (id: {member.guild.id}) is not configured.')
-
-        #    return
-
-        ## Get welcome channel by id and send welcome message.
-        #chan = member.guild.get_channel(chanid)
-        #user = self._app.get_user(member.id)
-        #await chan.send(f'Welcome to *{member.guild.name}*, **{user.name}**!')
 
 
 
