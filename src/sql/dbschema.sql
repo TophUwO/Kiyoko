@@ -26,9 +26,8 @@ CREATE TABLE guilds (
 -- Create 'guildsettings' table, holding guild-specific
 -- configuration such as command prefix, server alias, etc.
 CREATE TABLE guildsettings (
-    guildid     INTEGER  NOT NULL, -- guild id (pk)
-    alias       TEXT,              -- guild-specific nickname
-    logchan     INTEGER,           -- channel (id) to send log and debug messages to
+    guildid INTEGER NOT NULL,                -- guild id (pk)
+    config  TEXT              DEFAULT('{}'), -- guild settings stored as JSON
 
     PRIMARY KEY (
         guildid

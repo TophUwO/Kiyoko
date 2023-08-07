@@ -8,7 +8,7 @@
 # guild.py - event handlers and commands meant for guild management
 
 # imports
-import time
+import time, json
 import discord
 import discord.ext.commands as commands
 import discord.ext.tasks    as tasks
@@ -31,9 +31,9 @@ SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 # data class holding guild-related configuration
 @dataclass
 class KiyokoGuildConfig:
-    gid:     int
-    alias:   str
-    logchan: int
+    gid:     int                  # guild id
+    logchan: int                  # log channel id
+    mwidget: tuple[int, int, int] # [channel id, lastupd, lastmcount]
 
 
 # class for managing the guild config objects
@@ -66,10 +66,13 @@ class KiyokoGuildConfigManager(object):
         # Generate guild config objects and save them in the dictionary.
         for row in qres:
             # Unpack tuple.
-            (gid, alias, logchan) = row
+            (gid, config) = row
+
+            # Parse JSON object.
+            json_obj = json.loads(config)
     
             # Add generated object to dict with the guild id as key.
-            self._dict[gid] = KiyokoGuildConfig(gid, alias, logchan)
+            self._dict[gid] = KiyokoGuildConfig(gid, 0, (0, 0, 0))
     
         # Clean up.
         await cur.close()
@@ -205,8 +208,10 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         # Initialize parent class.
         super().__init__(app)
 
-        # Start 'on_prune_db' loop.
+        # Start background tasks.
         self.on_prune_db.start()
+        self.on_upd_mwidget.start()
+
 
     # This event is executed when the bot joins a guild. This can happen whenever the
     # bot is invited to join the guild or the bot creates a guild.
@@ -243,6 +248,51 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         # Everything went well.
         logger.info(f'Left guild \'{guild.name}\' (id: {guild.id})')
 
+    # Test command for member count widget. Will be merged into the /config command later.
+    #
+    # Returns nothing.
+    @commands.command(name = 'mwidget')
+    async def cmd_mwidget(self, ctx: commands.Context) -> None:
+        # Get guild config.
+        cfg = self._app.gcman.getgconfig(ctx.guild.id)
+        if cfg is None:
+            return
+
+        # Create the new voice channel if it does not exist.
+        if cfg.mwidget[0] in [None, 0]:
+            chan = await ctx.guild.create_voice_channel("xxxx", position = 0, user_limit = 0)
+
+            # Set channel ID in guild config.
+            cfg.mwidget = (chan.id, 0, 0)
+
+            logger.debug(f'Configured member count widget for guild {ctx.guild.name} (id: {ctx.guild.id}). Channel id: {chan.id}.')
+        else:
+            logger.warning('Guild member widget is already configured.')
+
+
+    # Periodically checks if any member widgets need updates. If they do, we check
+    # whether we can update and if yes, we issue the update command.
+    #
+    # Returns nothing.
+    @tasks.loop(seconds = 30)
+    async def on_upd_mwidget(self) -> None:
+        tnow  = int(time.time()) # current time
+        limit = 12 * 60 / 2      # 6 mins in seconds
+
+        # Go through all guilds and update all member widgets that need
+        # to be changed. Due to the hard rate limits we can only change a
+        # channel name twice per 10 minutes. To allow for a little more room,
+        # we will issue an update every 6 minutes.
+        for g in self._app.guilds:
+            # Get guild config.
+            cfg = self._app.gcman.getgconfig(g.id)
+            if cfg is None:
+                continue
+
+            # Update member widget if possible.
+            if cfg.mwidget[0] and tnow - cfg.mwidget[1] >= limit:
+                await self.__updmwidget(g, cfg, tnow)
+
 
     # This loop checks periodically (once per week) if any of the guild infos
     # referring to guilds the bot has left are old enough (>= 90 days) to be
@@ -254,7 +304,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         # Get required data.
         tnow   = int(time.time()) # current time (UNIX epoch)
         thres  = 60*60*24*90      # 90 days
-        othres = 20               # maximum number of ids to print
+        othres = 10               # maximum number of ids to print
 
         # Get all the entries that are too old.
         conn, cur = await self._app.dbman.newconn()
@@ -273,6 +323,40 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         await conn.commit()
         await conn.close()
 
+
+    # Updates the guild member count widget, which is modeled with an unjoinable voice
+    # channel. Note that if the member count has not changed since the last update, this
+    # function will do nothing.
+    #
+    # Returns nothing.
+    async def __updmwidget(self, guild: discord.Guild, cfg: KiyokoGuildConfig, tnow: int) -> None:
+        # Do not update if not configured.
+        if cfg.mwidget[0] == 0:
+            return
+
+        # Format new channel name. Do not issue update if channel member
+        # count has not changed since last update.
+        mcount = len(guild.members)
+        if mcount == cfg.mwidget[2]:
+            return
+        chname = f'Member Count: {mcount}'
+
+        # Update channel name and info tuple.
+        cfg.mwidget = (cfg.mwidget[0], tnow, mcount)
+        chan = guild.get_channel(cfg.mwidget[0])
+        if chan is not None:
+            await chan.edit(name = chname)
+
+            logger.debug(f'Updated member count widget for guild {guild.name} (id: {guild.id}).')
+        else:
+            # If channel could not be found, it was probably deleted manually.
+            # Unconfigure the member count widget in this case.
+            cfg.mwidget = (0, 0, 0)
+
+            logger.debug(
+                f'''Automatically unconfigured member count widget for guild {guild.name} (id: {guild.id}). '''
+                 '''The channel was probably manually deleted.'''
+            )
 
 
 # module entrypoint

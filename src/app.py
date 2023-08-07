@@ -21,6 +21,7 @@ import src.config        as kiyo_cfg
 import src.db            as kiyo_db
 import src.module        as kiyo_mod
 import src.modules.guild as kiyo_mguild
+import src.res           as kiyo_res
 
 
 
@@ -56,6 +57,9 @@ class KiyokoApplication(commands.Bot):
         self.modman = kiyo_mod.KiyokoModuleManager(self)
         # Initialize guild settings manager.
         self.gcman  = kiyo_mguild.KiyokoGuildConfigManager(self)
+        # Initialize resource manager.
+        self.resman = kiyo_res.KiyokoResourceManager(self)
+        self.resman.loadresources(self.cfg.getvalue('global', 'resinitpath'))
 
         # Start the mainloop of the client.
         self.run(

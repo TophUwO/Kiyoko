@@ -12,8 +12,7 @@
     <OutputPath>.</OutputPath>
     <Name>Kiyoko</Name>
     <RootNamespace>SukajanBot</RootNamespace>
-    <InterpreterId>
-    </InterpreterId>
+    <InterpreterId>Global|PythonCore|3.11</InterpreterId>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -25,6 +24,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="conf\" />
+    <Folder Include="res\" />
+    <Folder Include="res\icons\" />
+    <Folder Include="res\icons\small_n_flat\" />
     <Folder Include="src\" />
     <Folder Include="src\modules\" />
     <Folder Include="src\sql\" />
@@ -38,12 +40,18 @@
     <Compile Include="src\modules\guild.py" />
     <Compile Include="src\modules\member.py" />
     <Compile Include="main.py" />
+    <Compile Include="src\res.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="conf\.env" />
     <Content Include="requirements.txt" />
+    <Content Include="res\icons\small_n_flat\err.png" />
+    <Content Include="res\icons\small_n_flat\LICENSE" />
+    <Content Include="res\resources.json" />
     <Content Include="src\sql\dbschema.sql" />
-    <Content Include="TODO" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.11" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

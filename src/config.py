@@ -118,7 +118,8 @@ class KiyokoGlobalConfig(object):
         # Test (2): Are all required keys present in section 'general'?
         reqkeys = [
             'name',  'prefix', 'tokenpath', 'reconnect',
-            'dbdir', 'dbfile', 'dbschemapath', 'moduledir'
+            'dbdir', 'dbfile', 'dbschemapath', 'moduledir',
+            'resinitpath'
         ]
         if not all(key in self._parser['global'] for key in reqkeys):
             return False
