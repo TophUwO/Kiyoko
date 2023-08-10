@@ -8,10 +8,7 @@
 # res.py - resource manager for Kiyoko
 
 # imports
-import discord
-import enum
-import json
-import easy_pil
+import enum, json, easy_pil
 
 from loguru      import logger
 from dataclasses import dataclass
@@ -21,6 +18,7 @@ from dataclasses import dataclass
 # resource types
 class KiyokoResourceType(enum.Enum):
     LOCALIMG = 0 # image files saved on the local disk
+
 
 # class holding a resource (url)
 @dataclass
@@ -95,5 +93,15 @@ class KiyokoResourceManager(object):
 
         # Everything went well.
         logger.debug(f'Registered resource \'{rid}\' (url: {url}).')
+
+
+    # Retrieves a resource with a given identifier.
+    #
+    # Returns resource object, or None if the resource could not be found.
+    def getresource(self, rid: str) -> KiyokoResource | None:
+        if self._res.get(rid) is None:
+            return None
+
+        return self._res[rid]
 
 

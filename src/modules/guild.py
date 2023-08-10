@@ -8,6 +8,7 @@
 # guild.py - event handlers and commands meant for guild management
 
 # imports
+import dataclasses
 import time, json
 import discord
 import discord.ext.commands as commands
@@ -15,6 +16,7 @@ import discord.ext.tasks    as tasks
 
 from loguru      import logger
 from dataclasses import dataclass
+from typing      import Optional
 
 import src.module as kiyo_mod
 
@@ -31,9 +33,9 @@ SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 # data class holding guild-related configuration
 @dataclass
 class KiyokoGuildConfig:
-    gid:     int                  # guild id
-    logchan: int                  # log channel id
-    mwidget: tuple[int, int, int] # [channel id, lastupd, lastmcount]
+    gid:     int                                       # guild id
+    logchan: Optional[tuple[bool, int]]                # [enabled, channel_id]
+    mwidget: Optional[tuple[bool, int, int, int, str]] # [enabled, channel_id, lastupd, lastmcount]
 
 
 # class for managing the guild config objects
@@ -69,10 +71,14 @@ class KiyokoGuildConfigManager(object):
             (gid, config) = row
 
             # Parse JSON object.
-            json_obj = json.loads(config)
+            json_obj = dict(json.loads(config))
     
             # Add generated object to dict with the guild id as key.
-            self._dict[gid] = KiyokoGuildConfig(gid, 0, (0, 0, 0))
+            self._dict[gid] = KiyokoGuildConfig(
+                gid,
+                json_obj.get('logchan', None),
+                json_obj.get('mwidget', None)
+            )
     
         # Clean up.
         await cur.close()
@@ -109,6 +115,35 @@ async def updgentry(app, gid: int, values: list[tuple[str, any]], conn = None, c
         await cur.close()
         await conn.commit()
         await conn.close()
+
+
+# Updates a guild settings entry for a given guild. If the guild entry does not exist,
+# nothing will be updated.
+#
+# Returns nothing.
+async def updgsettings(app, cfg: KiyokoGuildConfig, conn = None, cur = None) -> None:
+    if cfg is None:
+        return
+
+    # Establish connection if needed.
+    istmp = False
+    if conn is None and cur is None:
+        istmp = True
+
+        conn, cur = await app.dbman.newconn()
+
+    # Generate JSON document from 'cfg'.
+    json_doc = json.dumps(dataclasses.asdict(cfg))
+    
+    # Execute 'UPDATE'.
+    await cur.execute(f'UPDATE guildsettings SET config = \'{json_doc}\' WHERE guildid = {cfg.gid}')
+
+    # Flush db and clean up.
+    if istmp:
+        await cur.close()
+        await conn.commit()
+        await conn.close()
+
 
 
 # Adds a guild entry to the database.
@@ -158,8 +193,9 @@ async def addgentry(app, gid: int, conn = None, cur = None) -> None:
             NULL
         );
 
-        INSERT INTO guildsettings (guildid) VALUES (
-            {gid}
+        INSERT INTO guildsettings (guildid, config) VALUES (
+            {gid},
+            '{{}}'
         )
         '''
     )
@@ -210,7 +246,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
 
         # Start background tasks.
         self.on_prune_db.start()
-        self.on_upd_mwidget.start()
+        #self.on_upd_mwidget.start()
 
 
     # This event is executed when the bot joins a guild. This can happen whenever the
@@ -248,6 +284,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         # Everything went well.
         logger.info(f'Left guild \'{guild.name}\' (id: {guild.id})')
 
+
     # Test command for member count widget. Will be merged into the /config command later.
     #
     # Returns nothing.
@@ -260,7 +297,10 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
 
         # Create the new voice channel if it does not exist.
         if cfg.mwidget[0] in [None, 0]:
-            chan = await ctx.guild.create_voice_channel("xxxx", position = 0, user_limit = 0)
+            chan = await ctx.guild.create_voice_channel("Member Count: -", position = 0, user_limit = 0)
+            over = chan.overwrites_for(ctx.guild.default_role)
+            over.connect = False
+            await chan.set_permissions(ctx.guild.default_role, overwrite=over)
 
             # Set channel ID in guild config.
             cfg.mwidget = (chan.id, 0, 0)
@@ -357,6 +397,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
                 f'''Automatically unconfigured member count widget for guild {guild.name} (id: {guild.id}). '''
                  '''The channel was probably manually deleted.'''
             )
+
 
 
 # module entrypoint
