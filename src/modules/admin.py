@@ -177,7 +177,6 @@ class KiyokoCommandGroup_Config(discord.app_commands.Group):
         enabled = 'whether or not the widget should be actively updated',
         fmt     = 'custom format for the member widget; use \'{}\' as a placeholder for the member count'
     )
-    @discord.app_commands.checks.cooldown(3, 30, key = commands.BucketType.guild)
     async def cmd_mcwidget(self, inter: discord.Interaction, enabled: Optional[bool], fmt: Optional[str]) -> None:
         # Check if user has required privileges.
         if not await helper_hasperms(self._app, 'config mcwidget', inter, inter.user, discord.Permissions(administrator = True)):
@@ -228,6 +227,63 @@ class KiyokoCommandGroup_Config(discord.app_commands.Group):
             ]
         )
         logger.info(f'Updated \'mcwidget\' setting for guild with id: {gcfg.gid}: {gcfg.mwidget}')
+
+    
+    # Configures the 'logchan' item which controls the channel that logging messages
+    # of the application will be sent to. The application needs to be able to send messages
+    # in this channel.
+    #
+    # Returns nothing.
+    @discord.app_commands.command(name = 'logchan', description = 'configures the logging channel the application will use')
+    @discord.app_commands.guild_only()
+    @discord.app_commands.describe(
+        enabled = 'whether or not logging to the logging channel is enabled',
+        channel = 'channel to use for logging; preferably a private, staff-only channel'
+    )
+    async def cmd_logchan(self, inter: discord.Interaction, enabled: Optional[bool], channel: Optional[discord.TextChannel]) -> None:
+        # Check if the command invoker has administrator permissions.
+        if not await helper_hasperms(self._app, 'config logchan', inter, inter.user, discord.Permissions(administrator = True)):
+            return
+        
+        # If the given channel is not None, check if the bot has the permission to send messages there.
+        if channel is not None:
+            if not channel.permissions_for(inter.guild.get_member(inter.client.user.id)).send_messages:
+                await cmderrembed(
+                    self._app,
+                    inter = inter,
+                    cmd   = 'config logchan',
+                    type  = KiyokoAppCommandError.AINSUFFPERMS,
+                    desc  = f'Application requires ``Send Messages`` permissions in channel <#{channel.id}>'
+                )
+
+                return
+
+        # If the entry does not exist in the guild config object, create it.
+        gcfg = self._app.gcman.getgconfig(inter.guild_id)
+        if gcfg.logchan is None:
+            gcfg.logchan = (False, 0)
+
+        # Update guild config cache.
+        olden   = gcfg.logchan[0]
+        oldchan = gcfg.logchan[1]
+        gcfg.logchan = (
+            gcfg.logchan[0] if enabled is None else enabled,
+            gcfg.logchan[1] if channel is None else channel.id
+        )
+        # Update configuration in database.
+        await kiyo_guild.updgsettings(self._app, gcfg)
+
+        # Send response.
+        await cfgupdembed(
+            self._app,
+            inter = inter,
+            desc  = 'logchan',
+            upd   = [
+                ('enabled', olden,   gcfg.logchan[0]) if enabled is not None and olden   != gcfg.logchan[0] else None,
+                ('channel', oldchan, gcfg.logchan[1]) if channel is not None and oldchan != gcfg.logchan[1] else None
+            ]
+        )
+        logger.info(f'Updated \'logchan\' setting for guild with id: {gcfg.gid}: {gcfg.logchan}')
 
 
 
