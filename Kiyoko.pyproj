@@ -40,10 +40,12 @@
     <Compile Include="src\modules\guild.py" />
     <Compile Include="src\modules\member.py" />
     <Compile Include="main.py" />
+    <Compile Include="src\modules\reddit.py" />
     <Compile Include="src\res.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="conf\.env" />
+    <Content Include="conf\.reddit" />
     <Content Include="requirements.txt" />
     <Content Include="res\icons\small_n_flat\err.png" />
     <Content Include="res\icons\small_n_flat\LICENSE" />

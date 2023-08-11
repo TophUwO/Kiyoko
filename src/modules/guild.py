@@ -36,6 +36,7 @@ class KiyokoGuildConfig:
     gid:     int                                       # guild id
     logchan: Optional[tuple[bool, int]]                # [enabled, channel_id]
     mwidget: Optional[tuple[bool, int, int, int, str]] # [enabled, channel_id, lastupd, lastmcount, fmt]
+    reddit:  Optional[list[dict[str, str | int]]]      # sub-reddit data
 
 
 # class for managing the guild config objects
@@ -77,7 +78,8 @@ class KiyokoGuildConfigManager(object):
             self._dict[gid] = KiyokoGuildConfig(
                 gid,
                 json_obj.get('logchan', None),
-                json_obj.get('mwidget', None)
+                json_obj.get('mwidget', None),
+                json_obj.get('reddit', None)
             )
     
         # Clean up.

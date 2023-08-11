@@ -347,7 +347,7 @@ class KiyokoModule_Admin(kiyo_mod.KiyokoModule_Base):
         # enough to invalidate the interaction, throwing an exception.
         # In this case, we just catch the exception and return.
         try:
-            await inter.response.send_message(file = file, embed = response)
+            await inter.response.send_message(file = file, embed = response, ephemeral = True)
         except:
             pass
 
