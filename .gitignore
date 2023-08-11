@@ -365,3 +365,5 @@ FodyWeavers.xsd
 # Misc
 db/
 *.token
+*.reddit
+/conf/.reddit
