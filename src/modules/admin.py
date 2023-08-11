@@ -13,8 +13,6 @@ import discord, datetime, enum
 from loguru import logger
 from typing import Optional
 
-import discord.ext.commands as commands
-
 import src.module        as kiyo_mod
 import src.modules.guild as kiyo_guild
 
@@ -172,7 +170,6 @@ class KiyokoCommandGroup_Config(discord.app_commands.Group):
     #
     # Returns nothing.
     @discord.app_commands.command(name = 'mcwidget', description = 'configures the member count widget')
-    @discord.app_commands.guild_only()
     @discord.app_commands.describe(
         enabled = 'whether or not the widget should be actively updated',
         fmt     = 'custom format for the member widget; use \'{}\' as a placeholder for the member count'
@@ -213,9 +210,11 @@ class KiyokoCommandGroup_Config(discord.app_commands.Group):
             gcfg.mwidget[3],
             gcfg.mwidget[4] if fmt is None else fmt
         )
+        # Update widget.
+        await kiyo_guild.setupmcwidget(inter.guild, gcfg)
         # Update configuration in database.
         await kiyo_guild.updgsettings(self._app, gcfg)
-
+    
         # Send response.
         await cfgupdembed(
             self._app,
@@ -235,7 +234,6 @@ class KiyokoCommandGroup_Config(discord.app_commands.Group):
     #
     # Returns nothing.
     @discord.app_commands.command(name = 'logchan', description = 'configures the logging channel the application will use')
-    @discord.app_commands.guild_only()
     @discord.app_commands.describe(
         enabled = 'whether or not logging to the logging channel is enabled',
         channel = 'channel to use for logging; preferably a private, staff-only channel'
@@ -335,6 +333,7 @@ class KiyokoModule_Admin(kiyo_mod.KiyokoModule_Base):
             await self._app.tree.sync()
 
         # Return response.
+        file = discord.File(self._app.resman.getresource('sync').url, filename = 'sync.png')
         response = fmtembed(
             color  = 0x6495ED,
             title  = 'Command Tree Synchronization',
@@ -342,13 +341,13 @@ class KiyokoModule_Admin(kiyo_mod.KiyokoModule_Base):
                     ' the new commands become available.',
             fields = [('Type', 'local' if ispriv == True else 'global', True)],
             footer = (f'Issued by {inter.user.display_name}', inter.user.display_avatar),
-            thumb  = 'https://icons.iconarchive.com/icons/paomedia/small-n-flat/256/sign-sync-icon.png'
+            thumb  = 'attachment://sync.png'
         )
         # When synching globally, it may happen that the response takes a long time which may be
         # enough to invalidate the interaction, throwing an exception.
         # In this case, we just catch the exception and return.
         try:
-            await inter.response.send_message(embed = response)
+            await inter.response.send_message(file = file, embed = response)
         except:
             pass
 

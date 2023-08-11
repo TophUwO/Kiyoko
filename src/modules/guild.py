@@ -35,7 +35,7 @@ SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 class KiyokoGuildConfig:
     gid:     int                                       # guild id
     logchan: Optional[tuple[bool, int]]                # [enabled, channel_id]
-    mwidget: Optional[tuple[bool, int, int, int, str]] # [enabled, channel_id, lastupd, lastmcount]
+    mwidget: Optional[tuple[bool, int, int, int, str]] # [enabled, channel_id, lastupd, lastmcount, fmt]
 
 
 # class for managing the guild config objects
@@ -246,7 +246,7 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
 
         # Start background tasks.
         self.on_prune_db.start()
-        #self.on_upd_mwidget.start()
+        self.on_upd_mwidget.start()
 
 
     # This event is executed when the bot joins a guild. This can happen whenever the
@@ -285,36 +285,11 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         logger.info(f'Left guild \'{guild.name}\' (id: {guild.id})')
 
 
-    # Test command for member count widget. Will be merged into the /config command later.
-    #
-    # Returns nothing.
-    @commands.command(name = 'mwidget')
-    async def cmd_mwidget(self, ctx: commands.Context) -> None:
-        # Get guild config.
-        cfg = self._app.gcman.getgconfig(ctx.guild.id)
-        if cfg is None:
-            return
-
-        # Create the new voice channel if it does not exist.
-        if cfg.mwidget[0] in [None, 0]:
-            chan = await ctx.guild.create_voice_channel("Member Count: -", position = 0, user_limit = 0)
-            over = chan.overwrites_for(ctx.guild.default_role)
-            over.connect = False
-            await chan.set_permissions(ctx.guild.default_role, overwrite=over)
-
-            # Set channel ID in guild config.
-            cfg.mwidget = (chan.id, 0, 0)
-
-            logger.debug(f'Configured member count widget for guild {ctx.guild.name} (id: {ctx.guild.id}). Channel id: {chan.id}.')
-        else:
-            logger.warning('Guild member widget is already configured.')
-
-
     # Periodically checks if any member widgets need updates. If they do, we check
     # whether we can update and if yes, we issue the update command.
     #
     # Returns nothing.
-    @tasks.loop(seconds = 30)
+    @tasks.loop(seconds = 60)
     async def on_upd_mwidget(self) -> None:
         tnow  = int(time.time()) # current time
         limit = 12 * 60 / 2      # 6 mins in seconds
@@ -326,12 +301,12 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         for g in self._app.guilds:
             # Get guild config.
             cfg = self._app.gcman.getgconfig(g.id)
-            if cfg is None:
+            if cfg is None or cfg.mwidget is None:
                 continue
 
             # Update member widget if possible.
-            if cfg.mwidget[0] and tnow - cfg.mwidget[1] >= limit:
-                await self.__updmwidget(g, cfg, tnow)
+            if cfg.mwidget[0] and cfg.mwidget[1] and tnow - cfg.mwidget[2] >= limit:
+                await self.__updmwidget(cfg, g, tnow)
 
 
     # This loop checks periodically (once per week) if any of the guild infos
@@ -369,34 +344,38 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
     # function will do nothing.
     #
     # Returns nothing.
-    async def __updmwidget(self, guild: discord.Guild, cfg: KiyokoGuildConfig, tnow: int) -> None:
-        # Do not update if not configured.
-        if cfg.mwidget[0] == 0:
-            return
-
-        # Format new channel name. Do not issue update if channel member
-        # count has not changed since last update.
+    async def __updmwidget(self, gcfg: KiyokoGuildConfig, guild: discord.Guild, tnow: int) -> None:
+        # Do not issue update if channel member count has not changed
+        # since last update.
         mcount = len(guild.members)
-        if mcount == cfg.mwidget[2]:
+        if mcount == gcfg.mwidget[3]:
             return
-        chname = f'Member Count: {mcount}'
 
         # Update channel name and info tuple.
-        cfg.mwidget = (cfg.mwidget[0], tnow, mcount)
-        chan = guild.get_channel(cfg.mwidget[0])
+        chan = guild.get_channel(gcfg.mwidget[1])
         if chan is not None:
-            await chan.edit(name = chname)
+            await chan.edit(name = gcfg.mwidget[4].format(mcount))
 
             logger.debug(f'Updated member count widget for guild {guild.name} (id: {guild.id}).')
         else:
             # If channel could not be found, it was probably deleted manually.
             # Unconfigure the member count widget in this case.
-            cfg.mwidget = (0, 0, 0)
-
             logger.debug(
                 f'''Automatically unconfigured member count widget for guild {guild.name} (id: {guild.id}). '''
                  '''The channel was probably manually deleted.'''
             )
+
+        # Update widget data.
+        gcfg.mwidget = (
+            gcfg.mwidget[0] if chan is not None else False,
+            gcfg.mwidget[1] if chan is not None else 0,
+            tnow,
+            mcount,
+            gcfg.mwidget[4]
+        )
+        # Update database config in case the widget was automatically unconfigured.
+        if chan is None:
+           await updgsettings(self._app, gcfg)
 
 
 
@@ -470,5 +449,40 @@ async def syncdb(app) -> None:
         logger.success('Successfully synched database.')
     else:
         logger.success('Database is up-to-date. Nothing to do.')
+
+
+# Initializes or uninitializes the Member Count Widget. Guild settings are
+# automatically updated.
+#
+# Returns nothing.
+async def setupmcwidget(guild: discord.Guild, gcfg: KiyokoGuildConfig) -> None:
+    mcount = len(guild.members) # initial member count
+    tnow   = int(time.time())   # current UNIX timestamp.
+    chanid = 0                  # channel id
+
+    if gcfg.mwidget[0]:
+        # Initialize Member Count Widget.
+        chan = await guild.create_voice_channel(name = gcfg.mwidget[4].format(mcount), position = 0, user_limit = 0)
+        await chan.set_permissions(guild.default_role, connect = False)
+
+        chanid = chan.id
+        logger.info(f'Configured mcwidget for guild \'{guild.name}\' (id: {guild.id}). Channel id: {chan.id}.')
+    else:
+        if gcfg.mwidget[1] == 0:
+            return
+
+        # Delete channel.
+        await guild.get_channel(gcfg.mwidget[1]).delete()
+        
+        logger.info(f'Deleted mcwidget channel for guild \'{guild.name}\' (id: {guild.id}).')
+
+    # Update mwidget data.
+    gcfg.mwidget = (
+        gcfg.mwidget[0],
+        chanid,
+        tnow,
+        mcount,
+        gcfg.mwidget[4]
+    )
 
 
