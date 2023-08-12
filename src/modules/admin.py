@@ -21,13 +21,24 @@ import src.modules.guild as kiyo_guild
 # Provides a more convenient way of building an embed to remove boilerplate code.
 #
 # Returns generated embed object.
-def fmtembed(*, color: int, title: str, desc: str, fields: Optional[list[tuple[str, any, bool]]], footer = Optional[tuple[str, any]], thumb: Optional[str]) -> discord.Embed:
+def fmtembed(
+    *,
+    color:  int,
+    title:  str,
+    desc:   str,
+    fields: Optional[list[tuple[str, any, bool]]] = None,
+    footer: Optional[tuple[str, any]] = None,
+    thumb:  Optional[str] = None,
+    url:    Optional[str] = None,
+    tstamp: Optional[datetime.datetime] = None
+) -> discord.Embed:
     # Prepare embed object.
     res = discord.Embed(
         color       = color,
         title       = title,
-        timestamp   = datetime.datetime.now(),
-        description = desc
+        timestamp   = tstamp if tstamp is not None else datetime.datetime.now(),
+        description = desc,
+        url         = url
     )
     if footer is not None:
         res.set_footer(text = footer[0], icon_url = footer[1])

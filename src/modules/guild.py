@@ -54,6 +54,15 @@ class KiyokoGuildConfigManager(object):
         return self._dict.get(gid, None)
 
 
+    # Creates a generator that allows us to iterate over all currently available
+    # guild configurations.
+    #
+    # Returns all guild configs.
+    def guildconfigs(self) -> KiyokoGuildConfig:
+        for gcfg in self._dict.values():
+            yield gcfg
+
+
     # Loads all guild-related configuration (i.e. 'guildsettings') into a dictionary of
     # data classes, indexed by the guild id.
     # This function can also be used to reload the config from the database in case it

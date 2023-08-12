@@ -112,6 +112,12 @@ class KiyokoApplication(commands.Bot):
         # Load guild configs.
         await self.gcman.loadgconfig()
 
+        # Initialize reddit data structure. Get the reddit command group first, which
+        # doubles as a check whether the module is even initialized.
+        redmod = self.tree.get_command('reddit')
+        if redmod is not None:
+            redmod.initdata()
+
         ## We are done setting things up and are now ready.
         logger.info(f'Kiyoko is now available as \'{self.user}\'. Ready.')
 
