@@ -211,8 +211,8 @@ class KiyokoSubredditManager:
 
             # Construct title and body preview. If they exceed a certain number of characters, they will be shortened.
             # If the post is marked as a spoiler, the body will be obscured using the regular discord spoiler via ||.
-            title = subm.title[:self.MTLEN] + '...' if len(subm.title) > self.MTLEN else subm.title
-            body  = subm.selftext[:self.MBLEN] + '...' if len(subm.selftext) > self.MBLEN else subm.selftext
+            title = subm.title[:self.MTLEN].strip() + '...' if len(subm.title) > self.MTLEN else subm.title
+            body  = subm.selftext[:self.MBLEN].strip() + '...' if len(subm.selftext) > self.MBLEN else subm.selftext
             if len(body) > 0 and subm.spoiler:
                 body = f'||{body}||'
 
@@ -236,12 +236,13 @@ class KiyokoSubredditManager:
             # Sometimes, posts may have unusual keywords instead of an actual URL, trying to load resources from
             # those will fail so we first verify that our submission URL is not actually a reserved keyword. 
             if subm.url not in [None, '', 'self', 'default', 'spoiler', 'image']:
-                # Check if 'image' url is a common video platform. If that's the case, do not set the image.
-                # This will be extended in the future to exclude even more links that point to resources that
-                # cannot be reliably displayed in a Discord embed.
+                # Only preview images that are from reddit itself, imgur is also fine.
                 domain = urlparse(subm.url).netloc
-                if not any(x in domain for x in ['youtu', 'tiktok', 'vimeo']):
+                if any(x in domain for x in ['i.redd.it', 'reddit.com/media', 'i.imgur.com']):
+                    #It's likely the URL is pointing to an image resource, try to display it.
                     embed.set_image(url = subm.url)
+                else:
+                    logger.debug(f'Blocked non-img URL: \'{subm.url}\'')
         except Exception as tmp_e:
             # Treat all exceptions as if there was an error with building the embed.
             logger.error(f'Could not build display embed. Reason: {tmp_e}')
