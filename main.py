@@ -8,7 +8,7 @@
 # main.py - application entrypoint
 
 # imports
-import os
+import os, asyncio
 from loguru import logger
 
 import src.app as kiyo_app
@@ -18,8 +18,8 @@ import src.app as kiyo_app
 # Start main loop.
 if __name__ == '__main__':
     try:
-        with kiyo_app.KiyokoApplication() as tmp_app:
-            pass
+        app = kiyo_app.KiyokoApplication()
+        app.runapp()
     except Exception as tmp_e:
         logger.critical(tmp_e)
 

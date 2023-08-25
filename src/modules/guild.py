@@ -33,10 +33,9 @@ SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 # data class holding guild-related configuration
 @dataclass
 class KiyokoGuildConfig:
-    gid:     int                                       # guild id
-    logchan: Optional[tuple[bool, int]]                # [enabled, channel_id]
-    mwidget: Optional[tuple[bool, int, int, int, str]] # [enabled, channel_id, lastupd, lastmcount, fmt]
-    reddit:  Optional[list[dict[str, str | int]]]      # sub-reddit data
+    gid:     int                                  # guild id
+    logchan: Optional[tuple[bool, int]]           # [enabled, channel_id]
+    reddit:  Optional[list[dict[str, str | int]]] # sub-reddit data
 
 
 # class for managing the guild config objects
@@ -51,7 +50,7 @@ class KiyokoGuildConfigManager(object):
     #
     # Returns guild settings object.
     def getgconfig(self, gid: int) -> KiyokoGuildConfig:
-        return self._dict.get(gid, None)
+        return self._dict.get(gid, KiyokoGuildConfig(gid, logchan = (False, 0), reddit = []))
 
 
     # Creates a generator that allows us to iterate over all currently available
@@ -87,7 +86,6 @@ class KiyokoGuildConfigManager(object):
             self._dict[gid] = KiyokoGuildConfig(
                 gid,
                 json_obj.get('logchan', None),
-                json_obj.get('mwidget', None),
                 json_obj.get('reddit', None)
             )
     
@@ -257,7 +255,6 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
 
         # Start background tasks.
         self.on_prune_db.start()
-        self.on_upd_mwidget.start()
 
 
     # This event is executed when the bot joins a guild. This can happen whenever the
@@ -296,30 +293,6 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         logger.info(f'Left guild \'{guild.name}\' (id: {guild.id})')
 
 
-    # Periodically checks if any member widgets need updates. If they do, we check
-    # whether we can update and if yes, we issue the update command.
-    #
-    # Returns nothing.
-    @tasks.loop(seconds = 60)
-    async def on_upd_mwidget(self) -> None:
-        tnow  = int(time.time()) # current time
-        limit = 12 * 60 / 2      # 6 mins in seconds
-
-        # Go through all guilds and update all member widgets that need
-        # to be changed. Due to the hard rate limits we can only change a
-        # channel name twice per 10 minutes. To allow for a little more room,
-        # we will issue an update every 6 minutes.
-        for g in self._app.guilds:
-            # Get guild config.
-            cfg = self._app.gcman.getgconfig(g.id)
-            if cfg is None or cfg.mwidget is None:
-                continue
-
-            # Update member widget if possible.
-            if cfg.mwidget[0] and cfg.mwidget[1] and tnow - cfg.mwidget[2] >= limit:
-                await self.__updmwidget(cfg, g, tnow)
-
-
     # This loop checks periodically (once per week) if any of the guild infos
     # referring to guilds the bot has left are old enough (>= 90 days) to be
     # deleted.
@@ -348,45 +321,6 @@ class KiyokoModule_Guild(kiyo_mod.KiyokoModule_Base):
         await cur.close()
         await conn.commit()
         await conn.close()
-
-
-    # Updates the guild member count widget, which is modeled with an unjoinable voice
-    # channel. Note that if the member count has not changed since the last update, this
-    # function will do nothing.
-    #
-    # Returns nothing.
-    async def __updmwidget(self, gcfg: KiyokoGuildConfig, guild: discord.Guild, tnow: int) -> None:
-        # Do not issue update if channel member count has not changed
-        # since last update.
-        mcount = len(guild.members)
-        if mcount == gcfg.mwidget[3]:
-            return
-
-        # Update channel name and info tuple.
-        chan = guild.get_channel(gcfg.mwidget[1])
-        if chan is not None:
-            await chan.edit(name = gcfg.mwidget[4].format(mcount))
-
-            logger.debug(f'Updated member count widget for guild {guild.name} (id: {guild.id}).')
-        else:
-            # If channel could not be found, it was probably deleted manually.
-            # Unconfigure the member count widget in this case.
-            logger.debug(
-                f'''Automatically unconfigured member count widget for guild {guild.name} (id: {guild.id}). '''
-                 '''The channel was probably manually deleted.'''
-            )
-
-        # Update widget data.
-        gcfg.mwidget = (
-            gcfg.mwidget[0] if chan is not None else False,
-            gcfg.mwidget[1] if chan is not None else 0,
-            tnow,
-            mcount,
-            gcfg.mwidget[4]
-        )
-        # Update database config in case the widget was automatically unconfigured.
-        if chan is None:
-           await updgsettings(self._app, gcfg)
 
 
 
@@ -460,40 +394,5 @@ async def syncdb(app) -> None:
         logger.success('Successfully synched database.')
     else:
         logger.success('Database is up-to-date. Nothing to do.')
-
-
-# Initializes or uninitializes the Member Count Widget. Guild settings are
-# automatically updated.
-#
-# Returns nothing.
-async def setupmcwidget(guild: discord.Guild, gcfg: KiyokoGuildConfig) -> None:
-    mcount = len(guild.members) # initial member count
-    tnow   = int(time.time())   # current UNIX timestamp.
-    chanid = 0                  # channel id
-
-    if gcfg.mwidget[0]:
-        # Initialize Member Count Widget.
-        chan = await guild.create_voice_channel(name = gcfg.mwidget[4].format(mcount), position = 0, user_limit = 0)
-        await chan.set_permissions(guild.default_role, connect = False)
-
-        chanid = chan.id
-        logger.info(f'Configured mcwidget for guild \'{guild.name}\' (id: {guild.id}). Channel id: {chan.id}.')
-    else:
-        if gcfg.mwidget[1] == 0:
-            return
-
-        # Delete channel.
-        await guild.get_channel(gcfg.mwidget[1]).delete()
-        
-        logger.info(f'Deleted mcwidget channel for guild \'{guild.name}\' (id: {guild.id}).')
-
-    # Update mwidget data.
-    gcfg.mwidget = (
-        gcfg.mwidget[0],
-        chanid,
-        tnow,
-        mcount,
-        gcfg.mwidget[4]
-    )
 
 

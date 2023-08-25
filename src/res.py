@@ -35,6 +35,12 @@ class KiyokoResourceManager(object):
         self._app = app
         self._res: dict[str, KiyokoResource] = dict()
 
+        # Get root of resource directory.
+        rpath = self._app.cfg.getvalue('global', 'resinitpath')
+        if rpath is not None:
+            # Load all resources.
+            self.loadresources(rpath)
+
 
     # Reads the given .json file and loads all resources referenced
     # inside it.
@@ -43,7 +49,7 @@ class KiyokoResourceManager(object):
     def loadresources(self, fname: str) -> None:
         # Load JSON object, containing all resources to be loaded.
         try:
-            logger.debug(f'Loading resource initialization file \'{fname}\'.')
+            logger.debug(f'Reading resource initialization file \'{fname}\'.')
 
             with open(fname, 'r') as tmp_fp:
                 json_obj = json.load(tmp_fp)
@@ -64,10 +70,11 @@ class KiyokoResourceManager(object):
         # Load all resources in the list.
         n = 0
         for res in res2load:
-            # Inpack dict.
             (rid, url) = res.values()
 
-            # Check if URL is valid.
+            # Check if URL is valid. Also try to open the image. This way,
+            # we can also catch if the file pointed to is not an image or
+            # whether the image file is corrupted.
             try:
                 tmp_edit = easy_pil.Editor(url)
             except Exception as tmp_e:
@@ -76,7 +83,7 @@ class KiyokoResourceManager(object):
                 continue
 
             # Register the resource.
-            self.regresource(rid, url)
+            self.__regresource(rid, url)
             n += 1
 
         # Send info message.
@@ -87,7 +94,7 @@ class KiyokoResourceManager(object):
     # the resource manager dictionary.
     #
     # Returns nothing.
-    def regresource(self, rid: str, url: str) -> None:
+    def __regresource(self, rid: str, url: str) -> None:
         # Construct resource object and insert it into the dictionary.
         self._res[rid] = KiyokoResource(rid, KiyokoResourceType.LOCALIMG, url)
 

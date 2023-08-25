@@ -10,6 +10,7 @@
 # imports
 import os
 import discord.ext.commands as commands
+import discord.app_commands as app_commands
 
 from loguru import logger
 
@@ -28,6 +29,13 @@ class KiyokoModule_Base(commands.Cog):
     def __init__(self, app):
         self._app = app
 
+
+# Base class for all command groups, reduces repeated code.
+class KiyokoCommandGroup_Base(app_commands.Group):
+    def __init__(self, app, name: str, desc: str):
+        super().__init__(name = name, description = desc)
+
+        self._app = app
 
 
 # class representing the module manager, handles (un-)loading of modules
@@ -101,25 +109,5 @@ class KiyokoModuleManager(object):
 
         # Everything went well.  
         logger.debug('Finished loading modules.')
-
-
-    # Syncs the command tree to all guilds the client is connected
-    # to.
-    #
-    # Returns nothing.
-    async def synccmdtree(self) -> None:
-        iserr = False
-        for guild in self._app.guilds:
-            try:
-                await self._app.tree.sync(guild = guild)
-            except Exception as tmp_e:
-                logger.error(f'Failed to sync command tree to guild "{guild.name}" (id: {guild.id}). Desc: {tmp_e}')
-
-                iserr = True
-                continue
-
-        # Everything went well.
-        if not iserr:
-            logger.success('Successfully synced command tree to Discord.')
 
 

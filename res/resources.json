@@ -1,11 +1,12 @@
 {
-  "required":  [ "error", "help", "info", "success", "sync", "settings" ],
+  "required":  [ "error", "help", "info", "success", "sync", "settings", "devtools" ],
   "resources": [
     { "id": "error",    "url": "res/icons/error.png"    },
     { "id": "help",     "url": "res/icons/help.png"     },
     { "id": "info",     "url": "res/icons/info.png"     },
     { "id": "success",  "url": "res/icons/success.png"  },
     { "id": "sync",     "url": "res/icons/sync.png"     },
-    { "id": "settings", "url": "res/icons/settings.png" }
+    { "id": "settings", "url": "res/icons/settings.png" },
+    { "id": "devtools", "url": "res/icons/devtools.png" }
   ]
 }

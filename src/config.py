@@ -58,6 +58,14 @@ class KiyokoGlobalConfig(object):
 
         return self._parser.get(section, key, fallback = fallback)
 
+
+    # Creates a generator that returns all keys in the 'global' section.
+    #
+    # Returns generator.
+    def globalkeys(self) -> str:
+        for key in self._parser['global'].keys():
+            yield key
+
     
     # Updates the configuration of the given *key* with *value*.
     # If the key does not exist, create a new one. If the key did
@@ -106,6 +114,28 @@ class KiyokoGlobalConfig(object):
         logger.success('Successfully loaded global configuration.')
 
 
+    # Writes the current configuration to the ".env" file.
+    #
+    # Returns True on success, False on failure.
+    def writeconfig(self, fname: str = None) -> None:
+        if self._changed == False:
+            return
+        fname = None or 'conf/.env'
+
+        # Write all values.
+        try:
+            with open(fname, 'w') as tmp_file:
+                self._parser.write(tmp_file)
+        except:
+            logger.error(f'Failed to write to configuration file \'{fname}\'.')
+
+            raise
+
+        # Everything went well.
+        self._changed = False
+        logger.success('Successfully wrote global configuration to file.')
+
+
     # Validates the dictionary generated from .env.
     #
     # Returns True if everything is okay, False if there
@@ -137,26 +167,5 @@ class KiyokoGlobalConfig(object):
 
         # Everything seems to be alright.
         return True
-
-
-    # Writes the current configuration to the ".env" file.
-    #
-    # Returns True on success, False on failure.
-    def writeconfig(self, fname: str) -> None:
-        if self._changed == False:
-            return
-
-        # Write all values.
-        try:
-            with open(fname, 'w') as tmp_file:
-                self._parser.write(tmp_file)
-        except:
-            logger.error(f'Failed to write to configuration file \'{fname}\'.')
-
-            raise
-
-        # Everything went well.
-        self._changed = False
-        logger.success('Successfully wrote global configuration to file.')
 
 

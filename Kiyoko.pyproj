@@ -25,8 +25,6 @@
   <ItemGroup>
     <Folder Include="conf\" />
     <Folder Include="res\" />
-    <Folder Include="res\icons\" />
-    <Folder Include="res\icons\small_n_flat\" />
     <Folder Include="src\" />
     <Folder Include="src\modules\" />
     <Folder Include="src\sql\" />
@@ -35,10 +33,11 @@
     <Compile Include="src\app.py" />
     <Compile Include="src\db.py" />
     <Compile Include="src\config.py" />
+    <Compile Include="src\error.py" />
+    <Compile Include="src\modules\dev.py" />
+    <Compile Include="src\utils.py" />
     <Compile Include="src\module.py" />
-    <Compile Include="src\modules\admin.py" />
     <Compile Include="src\modules\guild.py" />
-    <Compile Include="src\modules\member.py" />
     <Compile Include="main.py" />
     <Compile Include="src\modules\reddit.py" />
     <Compile Include="src\res.py" />
@@ -47,8 +46,6 @@
     <Content Include="conf\.env" />
     <Content Include="conf\.reddit" />
     <Content Include="requirements.txt" />
-    <Content Include="res\icons\small_n_flat\err.png" />
-    <Content Include="res\icons\small_n_flat\LICENSE" />
     <Content Include="res\resources.json" />
     <Content Include="src\sql\dbschema.sql" />
   </ItemGroup>

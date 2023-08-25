@@ -9,15 +9,19 @@
 #             to your discord server
 
 # imports
-import discord, asyncpraw
-import datetime, configparser
+import discord, asyncio
+import asyncpraw, typing
+import datetime, time, enum
+import configparser
 
 from loguru       import logger
 from urllib.parse import urlparse
 
 import discord.ext.tasks as tasks
 
-import src.modules.admin as kiyo_admin
+import src.utils         as kiyo_utils
+import src.error         as kiyo_error
+import src.modules.guild as kiyo_guild
 
 
 
@@ -26,17 +30,23 @@ class KiyokoRedditInitpathError(Exception):
     def __init__(self):
         super().__init__('\'{redinitpath}\' not could not be found in \'.env\'.')
 
-
 # exception for missing or malformed reddit initialization file
 class KiyokoRedditConfigFileError(Exception):
     def __init__(self, file: str):
         super().__init__(f'Reddit initialization file \'{file}\' could not be found or is malformed.')
 
-
-# class for not properly configured reddit initialization file
+# exception for not properly configured reddit initialization file
 class KiyokoRedditConfigError(Exception):
     def __init__(self, file: str):
         super().__init__(f'Reddit initialization file \'{file}\' is not properly configured. (missing/empty fields?).')
+
+
+# enum describing subreddit status (i.e. available, nonexistent, blacklisted)
+class KiyokoSubredditStatus(enum.Enum):
+    AVAILABLE   = 0, # sub is available, i.e. can be listened to
+    NONEXISTENT = 1, # sub does not exist
+    BLACKLISTED = 2, # sub exists but is globally blacklisted
+    ALRINFEED   = 3  # sub is already being listened to by the current guild
 
 
 
@@ -51,7 +61,9 @@ class KiyokoSubredditManager:
         self._blist: set[str] = set()  # global blacklist
         self._feed: set[str]  = set()  # current feed
         self._lid: str        = ''     # id of last submission processed
+        self._lts: int        = 0      # timestamp of the latest processed submission
         self._subl            = None   # subreddit listener
+        self._lfupd           = 0      # last feed creation timestamp
 
         # Read '.reddit' init file.
         path = self._app.cfg.getvalue('global', 'redinitpath')
@@ -94,12 +106,12 @@ class KiyokoSubredditManager:
         self._data: dict[str, list[tuple[int, int]]] = dict()
 
         # Start the stream.
-        self.on_scrape_newsubms.start()
+        self.__on_scrape_newsubms.start()
 
 
     # Uninitialize the 'reddit' instance.
-    async def __del__(self):
-        await self._reddit.close()
+    def __del__(self):
+        asyncio.get_event_loop().run_in_executor(self._reddit.close())
 
 
     # Initializes the data-structure. This has to be done after the module
@@ -111,59 +123,96 @@ class KiyokoSubredditManager:
         # Go through all guild configs and populate the data-structure.
         for gcfg in self._app.gcman.guildconfigs():
             # Get guild-specific reddit config.
-            redlist = gcfg.reddit
-            if redlist is None:
+            if gcfg.reddit is None:
                 continue
 
             # Populate data-structure.
-            for sname in [entry['name'] for entry in redlist]:
-                # Create subreddit entry if it does not exist.
-                existing = self._data.get(sname)
-                if existing is None:
-                    self._feed.add(sname)
-                    self._data[sname] = list()
+            for entry in gcfg.reddit:
+                try:
+                    # Add sub to feed.
+                    self._feed.add(entry.get('id'))
 
-                # Add guild info to current sub entry.
-                self._data[sname].append((gcfg.gid, 0))
+                    # Add subreddit to data storage.
+                    self.addsubreddit(entry.get('id'), gcfg.gid, entry.get('broadcast'))
+                except KeyError:
+                    logger.error(f'Subreddit listener entry malformed: {entry}')
 
 
-    # Checks if the given sub is globally blacklisted, and if yes, returns True, else False.
-    # If the sub does not exist, the function returns -1.
+    # Adds a subreddit to the internal data storage. If it already exists,
+    # nothing will be done.
     #
-    # Returns 1 if blacklisted, else 0.
-    async def issubblisted(self, name: str) -> int:
-        # Check if sub exists.
+    # Returns nothing.
+    def addsubreddit(self, subn: str, gid: int, cid: int) -> None:
+         self._data[subn] = self._data.get(subn, None) or list()
+         self._data[subn].append((gid, cid))
+
+
+    # Removes a subreddit listener from the internal data storage.
+    # If the guild is not subbed to the given subreddit, this function
+    # does nothing.
+    #
+    # Returns True if the listener was removed, False if not.
+    def remsubreddit(self, subn: str, gid: int) -> bool:
+        sublist = self._data.get(subn, [])
+        if gid in dict(sublist):
+            sublist.remove([(id, ch) for (id, ch) in sublist if id == gid][0])
+
+            return True
+
+        return False
+
+
+    # Queries the subreddit status for the given guild and subreddit.
+    #
+    # Returns a 2-tuple, describing the subreddit's status. The values
+    # signify the following in this order:
+    #  (1) sub name
+    #  (2) sub status
+    async def querysubstatus(self, gid: int, sub: str) -> tuple[str, KiyokoSubredditStatus]:
+        res = KiyokoSubredditStatus.AVAILABLE
+
+        # Check if the guild is already listening to the sub.
+        if self.__isguildsubbed(gid, sub):
+            res = KiyokoSubredditStatus.ALRINFEED
+        # Check if the sub is blacklisted.
+        elif sub in self._blist:
+            res = KiyokoSubredditStatus.BLACKLISTED
+
+        # Return final result.
+        return (sub, res)
+
+
+    # Updates the feed of the subreddit stream. This happens whenever a guild adds
+    # a previously non-tracked subreddit to the manager.
+    #
+    # Returns nothing.
+    async def updfeed(self, upd: tuple[str, bool]) -> None:
+        # Add or remove the given sub.
+        (sname, isadd) = upd
+
+        # If given sub is blacklisted, do not attempt to add. Attempting to remove it is also nonsensical because
+        # they cannot be added in the first place.
         try:
-            sub = await self._reddit.subreddit(name)
-            if sub is None:
-                return -1
-        except:
-            # Treat exceptions as if the sub does not exist.
-            return -1
+            if isadd and sname not in self._blist:
+                self._feed.add(sname)
+                # If no guilds are listening to the subreddit any longer, remove the entry
+                # completely.
+            elif not isadd and self.__nsubs(sname) == 0:
+                self._feed.remove(sname)
+        except KeyError:
+            # If the sub entry does not exist, 'remove' will throw a KeyError. Because it's not really important,
+            # we just catch and ignore the exception.
+            pass
 
-        # Check if the sub is blacklisted. If yes, return 
-        return name in self._blist
-
-
-    # Tries to find the given sub name in the feed. If it exists, return True else return False.
-    #
-    # Returns whether sub exists in feed.
-    def issubinfeed(self, name: str) -> bool:
-        return name in self._feed
-
-
-    # Gets the number of subs a given guild is currently listening to.
-    #
-    # Returns number.
-    def getnsubs(self, gid) -> int:
-        return sum((gid in dict(entries)) for entries in self._data.values())
+        # Rebuild feed.
+        await self.__buildfeed()
 
 
     # Checks whether the guild is currently subscribed to the given subreddit.
     #
     # Returns True if the guild is subscribed to the given sub,
     # False if not.
-    def isguildsubbed(self, gid: int, name: str) -> bool:
+    def __isguildsubbed(self, gid: int, name: str) -> bool:
         # Get subreddit entry.
         entry = self._data.get(name)
         if entry is None:
@@ -173,30 +222,17 @@ class KiyokoSubredditManager:
         return gid in dict(entry)
 
 
-    # Updates the feed of the subreddit stream. This happens whenever a guild adds
-    # a previously non-tracked subreddit to the manager.
+    # Rebuilds the feed using the current list of subs that are listened to.
     #
     # Returns nothing.
-    async def updfeed(self, upd: list[tuple[str, bool]]) -> None:
-        # Add (if they do not already exist in the feed) or remove (if there are no more guilds listening) the given subs.
-        for item in upd:
-            (sname, isadd) = item
-
-            # If given sub is blacklisted, do not attempt to add. Attempting to remove it is also nonsensical because
-            # they cannot be added in the first place.
-            try:
-                self._feed.add(sname) if isadd and sname not in self._blist else self._feed.remove(sname)
-            except KeyError:
-                # If the sub entry does not exist, 'remove' will throw a KeyError. Because it's not really important,
-                # we just catch and ignore the exception.
-                pass
-
-        # Rebuild feed.
+    async def __buildfeed(self) -> None:
         try:
-            self._subl = await self._reddit.subreddit('+'.join(self._feed))
+            self._subl  = await self._reddit.subreddit('+'.join(self._feed))
+            self._lfupd = int(time.time())
+
+            logger.info(f'Successfully updated feed to {self._feed} (time: {self._lfupd})')
         except Exception as tmp_e:
             logger.error(f'Could not update feed. Reason: {tmp_e}')
-
 
     # This function formats the embed that will be sent to all subscribers of a given subreddit that has just
     # been submitted a new post.
@@ -217,7 +253,7 @@ class KiyokoSubredditManager:
                 body = f'||{body}||'
 
             # Construct embed.
-            embed = kiyo_admin.fmtembed(
+            embed = kiyo_utils.fmtembed(
                 color  = 0xff6314, # reddit orange
                 title  = title,
                 tstamp = datetime.datetime.fromtimestamp(subm.created_utc),
@@ -234,15 +270,14 @@ class KiyokoSubredditManager:
             # Try to load an embedded image if the post has one. Posts may also have other links that are
             # not images, which will cause the image preview to fail.
             # Sometimes, posts may have unusual keywords instead of an actual URL, trying to load resources from
-            # those will fail so we first verify that our submission URL is not actually a reserved keyword. 
+            # those will fail so we first verify that our submission URL is not actually a reserved keyword.
             if subm.url not in [None, '', 'self', 'default', 'spoiler', 'image']:
-                # Only preview images that are from reddit itself, imgur is also fine.
+                # Only preview images that are from reddit itself, imgur is also fine. Do not send the image preview
+                # if the post is marked as a spoiler.
                 domain = urlparse(subm.url).netloc
-                if any(x in domain for x in ['i.redd.it', 'reddit.com/media', 'i.imgur.com']):
-                    #It's likely the URL is pointing to an image resource, try to display it.
+                if any(x in domain for x in ['i.redd.it', 'reddit.com/media', 'i.imgur.com', 'preview.redd.it']) and not subm.spoiler:
+                    # It's likely the URL is pointing to an image resource, try to display it.
                     embed.set_image(url = subm.url)
-                else:
-                    logger.debug(f'Blocked non-img URL: \'{subm.url}\'')
         except Exception as tmp_e:
             # Treat all exceptions as if there was an error with building the embed.
             logger.error(f'Could not build display embed. Reason: {tmp_e}')
@@ -253,58 +288,77 @@ class KiyokoSubredditManager:
         return embed
 
 
+    # Retrieves the number of guilds that are subscribed to a given subreddit.
+    # If the subreddit is not being listened to (i.e. not in cache), the function
+    # returns 0.
+    #
+    # Returns number of subscribed guilds.
+    def __nsubs(self, subn: str) -> int:
+        return len(self._data.get(subn, []))
+
+
     # This background task now queries all registered sub-reddits and sends the results
     # to all guilds that subscribed to the subs that posted the submissions.
     #
     # Returns nothing.
-    @tasks.loop(seconds = 5)
-    async def on_scrape_newsubms(self) -> None:
+    @tasks.loop(seconds = 30)
+    async def __on_scrape_newsubms(self) -> None:
         # If the feed has not yet been initialized (i.e. no subs are being listened to), just
         # return and try again when the next iteration starts.
-        if self._subl is None:
-            return
+        if self._subl is None and len(self._feed) > 0:
+           await self.__buildfeed()
 
         # Wait for new submissions to come in any of the subs in the feed.
-        newlatest = None
-        async for subm in self._subl.new():
-            # If we are about to process the first time of the current iteration, update
-            # the variable that holds the first-processed post of the iteration.
-            if newlatest is None:
-                newlatest = subm.id
-            # If we are not processing the first post, process new posts as long as we have
-            # not reached the latest post of the previous iteration.
-            # If there is no latest post (i.e. first iteration of first ever run or no registered
-            # subreddits prior to current iteration), simply skip the current iteration to prevent
-            # spamming the first subscriber with possibly a ton of posts.
-            elif subm.id == self._lid or self._lid == '':
-                break
+        newlatest = ''
+        latestts  = 0
+        try:
+            async for subm in self._subl.new():
+                # If we are about to process the first time of the current iteration, update
+                # the variable that holds the first-processed post of the iteration.
+                if newlatest == '':
+                    newlatest = subm.id
+                    latestts  = int(subm.created)
+                # If we are not processing the first post, process new posts as long as we have
+                # not reached the latest post of the previous iteration.
+                # If there is no latest post (i.e. first iteration of first ever run or no registered
+                # subreddits prior to current iteration), simply skip the current iteration to prevent
+                # spamming the first subscriber with possibly a ton of posts.
+                if subm.id == self._lid or self._lid == '' or int(subm.created) < self._lfupd or int(subm.created) <= self._lts:
+                    break
 
-            # Prepare a fancy embed that is then sent to all guilds that have subscribed to the
-            # subreddit the post was submitted to.
-            try:
-                # Prepare message embed.
-                embed = await self.__fmtredditembed(subm)
-                
-                # Post the embed in every guild that subscribed to the sub the submission was
-                # posted in.
-                #for entry in self._data[subm.subreddit.name]:
-                #logger.debug(f'cr: {subm.created_utc} == New Subreddit Post: Sub: {subm.subreddit_name_prefixed}, Name: {subm.title}, Id: {subm.id}')
-                chan: discord.abc.TextChannel = self._app.get_guild(1122607253967622297).get_channel(1122607253967622300)
-                await chan.send(embed = embed)
-            except:
-                # In case there was an issue, like an invalid response or any malformed
-                # data, just skip the post.
-                continue
+                # Prepare a fancy embed that is then sent to all guilds that have subscribed to the
+                # subreddit the post was submitted to.
+                try:
+                    # Prepare message embed.
+                    embed = await self.__fmtredditembed(subm)
+                    
+                    # Post the embed in every guild that subscribed to the sub the submission was
+                    # posted in.
+                    sublist = self._data.get(subm.subreddit_name_prefixed[2:], None)
+                    for (gid, chan) in sublist or []:
+                        try:
+                            gchan = self._app.get_guild(gid).get_channel(chan)
+                            await gchan.send(embed = embed)
+                        except Exception as tmp_e:
+                            logger.error(f'Could not send post to broadcast channel. Reason: {tmp_e}')
+                except Exception as tmp_e:
+                    # In case there was an issue, like an invalid response or any malformed
+                    # data, just skip the post.
+                    logger.error(f'Could not send post from subreddit \'{subm.subreddit_name_prefixed}\'. Reason: {tmp_e}')
 
-            # Create embed title and description, shortening them if necessary.
+            # Update 'new latest' post.
+            self._lid = newlatest
+            self._lts = max(latestts, self._lts)
+        except Exception as tmp_e:
+            # In case there was an error scraping new submissions, log it.
+            logger.error(f'Could not scrape new submissions. Reason: {tmp_e}')
 
 
-        # Update 'new latest' post.
-        self._lid = newlatest
 
-
-
-# command group controlling the reddit module
+# command group controlling the reddit module, commands in here is only for members
+# with the 'manage_guild' permission
+@discord.app_commands.guild_only()
+@discord.app_commands.default_permissions(manage_guild = True)
 class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
     # maximum number of subs a single guild can subscribe to.
     MAXLISTENERS = 8
@@ -315,12 +369,7 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
         self._app = app
         self._man = KiyokoSubredditManager(app)
 
-
-    # Initializes the data-structure by calling the internal init function of
-    # the KiyokoSubredditManager instance.
-    #
-    # Returns nothing.
-    def initdata(self) -> None:
+        # Read all reddit data from database.
         self._man.initdata()
 
 
@@ -328,41 +377,124 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
     # of MAXLISTENERS subreddits that a guild can listen to.
     #
     # Returns nothing.
-    @discord.app_commands.command(name = 'add', description = f'subscribes to a list of sub-reddits (max: {MAXLISTENERS})')
+    @discord.app_commands.command(name = 'add', description = f'subscribes to a new subreddit (max: {MAXLISTENERS})')
     @discord.app_commands.describe(
-        subreddits = 'comma-separated list of subreddits to start listening to, with or without \'r/\'',
-        broadcast  = 'channel to broadcast sub-reddit submissions to'
+        subreddit = 'subreddit that is to be listened to; can be with or without \'r/\'; must be exact',
+        broadcast = 'channel to broadcast sub-reddit submissions to'
     )
-    async def cmd_redditadd(self, inter: discord.Interaction, subreddits: str, broadcast: discord.TextChannel) -> None:
-        # Check if user has administrator permissions.
-        if not await kiyo_admin.helper_hasperms(self._app, 'reddit add', inter, inter.user, discord.Permissions(administrator = True)):
-            return
-        
+    async def cmd_add(self, inter: discord.Interaction, subreddit: str, broadcast: discord.TextChannel) -> None:
         # Check if the application has 'send_messages' and 'attach_files' permissions
         # in the given broadcast channel.
-        appperms = broadcast.permissions_for(inter.guild.get_member(inter.client.user.id))
-        if not appperms.send_messages or not appperms.attach_files:
-            await kiyo_admin.cmderrembed(
-                self._app,
+        reqperms = discord.Permissions(view_channel = True, embed_links = True, send_messages = True)
+        if not kiyo_utils.haschanperms(inter, broadcast, reqperms):
+            raise kiyo_error.MissingChannelPermissions
+
+        # Get status of sub.
+        (name, status) = await self._man.querysubstatus(inter.guild.id, subreddit.strip())
+        
+        # If sub can be added, check if we have have not yet hit the maximum
+        # number of listeners per guild.
+        if status == KiyokoSubredditStatus.AVAILABLE:
+            gcfg = self._app.gcman.getgconfig(inter.guild.id)
+            # Create listener list if necessary.
+            gcfg.reddit = gcfg.reddit or list()
+
+            # If we have hit the maximum, cannot add more. Output an error
+            # in that case.
+            if len(gcfg.reddit) >= self.MAXLISTENERS:
+                raise kiyo_error.AllSlotsOccupied
+
+            # Add sub to listener list.
+            gcfg.reddit.append({'id': name, 'broadcast': broadcast.id})
+            # Add sub to data storage.
+            self._man.addsubreddit(name, inter.guild.id, broadcast.id)
+            # Update subreddit feed.
+            await self._man.updfeed((name, True))
+            # Update guild config.
+            await kiyo_guild.updgsettings(self._app, gcfg)
+
+            # Respond with success message.
+            (embed, file) = kiyo_utils.cfgupdembed(
+                app = self._app,
                 inter = inter,
-                cmd   = 'reddit add',
-                type  = kiyo_admin.KiyokoAppCommandError.AINSUFFPERMS,
-                desc  = f'The application needs to have ``Send Messages`` and ``Attach Files`` permissions in <#{broadcast.id}>.'
+                desc  = 'reddit',
+                upd   = [],
+                extra = f'\n\nSubreddit listener ``#{len(gcfg.reddit)}`` for ``r/{name}`` has been successfully added. '
+                        f'``{self.MAXLISTENERS - len(gcfg.reddit)}`` listeners remaining.'
             )
+            await kiyo_utils.sendmsgsecure(inter, embed = embed, file = file)
+        else:
+            raise kiyo_error.InvalidParameter
 
-            return
 
-        # Compile the list of subs that can be added to the feed. Take into consideration the maximum number
-        # of registerable subs per guild and which subs are blacklisted.
-        slist = [(x, True) for x in subreddits.strip().replace(' ', '').split(',') if not await self._man.issubblisted(x)]
-        await self._man.updfeed(slist)
+    # Auto-complete callback for '/reddit rem'; allows the user to choose between
+    # subs the guild is actually listening to.
+    #
+    # Returns list of sub-reddits that the guild is listening to.
+    async def __cmd_rem_autocmpl(self, inter: discord.Interaction, current: str) -> typing.List[discord.app_commands.Choice[str]]:
+        # Get list of all subs the guild is listening to.
+        slist = [x.get('id') for x in self._app.gcman.getgconfig(inter.guild.id).reddit]
 
-        try:
-            await inter.response.send_message(f'Added {slist}.')
-        except:
-            pass
-        #naddable = self.MAXLISTENERS - self._man.getnsubs(inter.guild.id)
-        #flist    = [x for x in subreddits.strip().replace(' ', '').split(',') if await self._man.issubblisted(x) == 0 and not self._man.issubinfeed(x)]
+        # Compile and return list of available choices.
+        return [discord.app_commands.Choice(name = x, value = x) for x in slist]
+
+    # Removes a subreddit listener for a specific guild.
+    #
+    # Returns nothing.
+    @discord.app_commands.command(name = 'rem', description = 'unsubscribes from a specific subreddit')
+    @discord.app_commands.describe(subreddit = 'subreddit name to unsubscribe from; must be exact')
+    @discord.app_commands.autocomplete(subreddit = __cmd_rem_autocmpl)
+    async def cmd_rem(self, inter: discord.Interaction, subreddit: str) -> None:
+        subn = subreddit.strip()
+
+        # Try removing the sub listener.
+        if self._man.remsubreddit(subn, inter.guild.id):
+            # Update guild config cache.
+            gcfg = self._app.gcman.getgconfig(inter.guild.id)
+            gcfg.reddit = [x for x in gcfg.reddit if x.get('id') != subn]
+            # Update feed.
+            await self._man.updfeed((subn, False))
+            # Update guild settings in db.
+            await kiyo_guild.updgsettings(self._app, gcfg)
+
+            # Prepare and send confirmation message.
+            (embed, file) = kiyo_utils.cfgupdembed(
+                app = self._app,
+                inter = inter,
+                desc  = 'reddit',
+                upd   = [],
+                extra = f'\n\nSubreddit listener for ``r/{subn}`` has been successfully removed. '
+                        f'``{self.MAXLISTENERS - len(gcfg.reddit)}`` listeners available.'
+            )
+            await kiyo_utils.sendmsgsecure(inter, embed = embed, file = file)
+        else:
+            raise kiyo_error.InvalidParameter
+
+
+
+    # Lists all active subreddit listeners for a given guild.
+    #
+    # Returns nothing.
+    @discord.app_commands.command(name = 'list', description = 'lists all active subreddit listeners for the current guild')
+    async def cmd_list(self, inter: discord.Interaction) -> None:
+        # Get guild config for current guild.
+        gcfg = self._app.gcman.getgconfig(inter.guild.id)
+
+        # Enumerate a string that contains all active subreddit listeners.
+        nlisten = 1
+        extra   = f'Active subreddit listeners for guild ``{inter.guild.name}`` (id: ``{inter.guild.id}``):\n'
+        for entry in gcfg.reddit:
+            extra += f'\n{nlisten}. ``r/{entry["id"]}``; bc: <#{entry["broadcast"]}>'
+
+            nlisten += 1
+
+        # Prepare and send response.
+        (embed, file) = kiyo_utils.fmtcfgviewembed(
+            app   = self._app,
+            inter = inter,
+            desc  = extra
+        )
+        await kiyo_utils.sendmsgsecure(inter, file = file, embed = embed)
 
 
 
@@ -374,7 +506,7 @@ async def setup(app) -> None:
         cmdgroup = KiyokoCommandGroup_Reddit(
             app,
             name = 'reddit',
-            desc = 'manages the sub-reddit streaming module'
+            desc = 'manages the subreddit streaming module'
         )
     except Exception as tmp_e:
         logger.error(f'Failed to initialize \'reddit\' module. Reason: {tmp_e}')
