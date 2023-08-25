@@ -387,7 +387,7 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
         # in the given broadcast channel.
         reqperms = discord.Permissions(view_channel = True, embed_links = True, send_messages = True)
         if not kiyo_utils.haschanperms(inter, broadcast, reqperms):
-            raise kiyo_error.MissingChannelPermissions
+            raise kiyo_error.AppCmd_MissingChannelPermissions
 
         # Get status of sub.
         (name, status) = await self._man.querysubstatus(inter.guild.id, subreddit.strip())
@@ -423,7 +423,7 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
             )
             await kiyo_utils.sendmsgsecure(inter, embed = embed, file = file)
         else:
-            raise kiyo_error.InvalidParameter
+            raise kiyo_error.AppCmd_InvalidParameter
 
 
     # Auto-complete callback for '/reddit rem'; allows the user to choose between
@@ -466,7 +466,7 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
             )
             await kiyo_utils.sendmsgsecure(inter, embed = embed, file = file)
         else:
-            raise kiyo_error.InvalidParameter
+            raise kiyo_error.AppCmd_InvalidParameter
 
 
 

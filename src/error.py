@@ -42,6 +42,11 @@ class AppCmd_AllSlotsOccupied(CheckFailure):
 class AppCmd_NotFound(CheckFailure):
     pass
 
+# This exception is thrown whenever an application command is added to the tree
+# but is still not implemented.
+class AppCmd_NotImplemented(CheckFailure):
+    pass
+
 
 # Exception that is raised whenever a message command that is only supposed to
 # be run from a PM channel is invoked in a guild context.
@@ -90,6 +95,7 @@ gl_errordesc: dict[type, str] = {
     AppCmd_AllSlotsOccupied:          'All slots are currently occupied.',
     AppCmd_NotFound:                  'This application command could not be found. It\'s likely it got removed. '
                                       'Please contact the owner of the application.',
+    AppCmd_NotImplemented:            'This command has yet to be implemented.',
 
     # message command errors
     CommandInvokeError:               'Could not successfully complete command callback. This is likely a bug in the callback\'s code '
@@ -127,18 +133,14 @@ def cmderrembed(
     # Get full command name, taking into account if the command is
     # a sub-command (i.e. part of a group). Takes into account
     # arbitrarily nested sub-commands.
-    fname = inter.data.get('name')
-    while (cmd.parent if cmd is not None else None) is not None:
-        fname = cmd.parent.name + ' ' + fname
-
-        cmd = cmd.parent
+    fname = cmd.qualified_name
 
     # Generate fancy explanatory embed.
     return (kiyo_utils.fmtembed(
         color  = 0xFF3030,
         title  = f'{"Application" if isinstance(inter, discord.Interaction) else "Message"} Command Error',
-        desc   = f'While processing command ``{fname}``, an error occurred! Please use '
-                 f'``{app.cfg.getvalue("global", "prefix", "/")}help {fname}`` for detailed usage of this command.',
+        desc   = f'While processing command ``{fname}``, an error occurred. Please use '
+                 f'``{app.cfg.getvalue("global", "prefix", "/")}help commands:{fname}`` for detailed usage of this command.',
         fields = [('Description', errmsg or f'Unknown error ({type(err).__name__}).', False)],
         thumb  = 'attachment://error.png'
     ), file)
@@ -164,11 +166,11 @@ class KiyokoCommandTree(discord.app_commands.CommandTree):
             guildstr = inter.guild.name if inter.guild is not None else 'none'
             logger.error(
                 f'Exception in command \'{inter.data.get("name")}\' (guild: \'{guildstr}\'). '
-                f'Desc: {gl_errordesc.get(type(err)) or type(err).__name__}'    
+                f'Desc: {gl_errordesc.get(type(err.original)) or type(err.original).__name__}'    
             )
 
         # Prepare embed.
-        (embed, file) = cmderrembed(self.client, inter = inter, err = AppCmd_NotFound() if inter.command is None else err)
+        (embed, file) = cmderrembed(self.client, inter = inter, err = AppCmd_NotFound() if inter.command is None else err.original)
         # Send descriptive error message.
         await kiyo_utils.sendmsgsecure(inter, file = file, embed = embed, ephemeral = True)
 
