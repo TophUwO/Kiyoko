@@ -371,6 +371,10 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
             )
 
             return
+        # If the command could not be found, simply ignore it for it could have been meant for a
+        # different application, etc.
+        elif ctx.command is None:
+            return
 
         # Prepare embed.
         (embed, file) = kiyo_error.cmderrembed(self._app, inter = ctx, err = err)

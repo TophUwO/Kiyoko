@@ -37,6 +37,11 @@ class AppCmd_NotApplicationOwner(CheckFailure):
 class AppCmd_AllSlotsOccupied(CheckFailure):
     pass
 
+# This exception is thrown whenever an application command is executed that does
+# not exist (any longer).
+class AppCmd_NotFound(CheckFailure):
+    pass
+
 
 # Exception that is raised whenever a message command that is only supposed to
 # be run from a PM channel is invoked in a guild context.
@@ -83,6 +88,8 @@ gl_errordesc: dict[type, str] = {
     AppCmd_MissingChannelPermissions: 'The application is missing channel permissions.',
     AppCmd_NotApplicationOwner:       'This command can only be invoked by the owner of this application.',
     AppCmd_AllSlotsOccupied:          'All slots are currently occupied.',
+    AppCmd_NotFound:                  'This application command could not be found. It\'s likely it got removed. '
+                                      'Please contact the owner of the application.',
 
     # message command errors
     CommandInvokeError:               'Could not successfully complete command callback. This is likely a bug in the callback\'s code '
@@ -114,15 +121,17 @@ def cmderrembed(
     file = discord.File(app.resman.getresource('error').url, filename = 'error.png')
 
     # Get error message.
+    cmd    = inter.command
     errmsg = gl_errordesc.get(type(err)) or ''
 
-    # Get full command name, taking into account if the command is a sub-command
-    # (i.e. part of a group). Note that this does not account for nested groups
-    # for it is not needed right now. This code will be extended to support arbitrary
-    # nesting levels once the first command utilizing it is introduced.
-    fname = inter.command.name
-    if inter.command.parent:
-        fname = inter.command.parent.name + ' ' + fname
+    # Get full command name, taking into account if the command is
+    # a sub-command (i.e. part of a group). Takes into account
+    # arbitrarily nested sub-commands.
+    fname = inter.data.get('name')
+    while (cmd.parent if cmd is not None else None) is not None:
+        fname = cmd.parent.name + ' ' + fname
+
+        cmd = cmd.parent
 
     # Generate fancy explanatory embed.
     return (kiyo_utils.fmtembed(
@@ -144,15 +153,23 @@ class KiyokoCommandTree(discord.app_commands.CommandTree):
     #
     # Returns nothing.
     async def on_error(self, inter: discord.Interaction, err: discord.app_commands.AppCommandError) -> None:
-        # Prepare embed.
-        (embed, file) = cmderrembed(self.client, inter = inter, err = err)
+        # If the command simply could not be found, present a message describing the error.
+        if inter.command is None:
+            logger.error(
+                'Tried to invoke an application command that does not exist. That\'s likely because '
+                'the command existed, got removed but no \'/sync\' was run to remove the command '
+                'signature from the global command tree.'
+            )
+        else:
+            guildstr = inter.guild.name if inter.guild is not None else 'none'
+            logger.error(
+                f'Exception in command \'{inter.data.get("name")}\' (guild: \'{guildstr}\'). '
+                f'Desc: {gl_errordesc.get(type(err)) or type(err).__name__}'    
+            )
 
-        # Send message.
-        guildstr = inter.guild.name if inter.guild is not None else 'none'
-        logger.error(
-            f'Exception in command \'{inter.command.name}\' (guild: \'{guildstr}\'). '
-            f'Desc: {gl_errordesc.get(type(err)) or type(err).__name__}'    
-        )
+        # Prepare embed.
+        (embed, file) = cmderrembed(self.client, inter = inter, err = AppCmd_NotFound() if inter.command is None else err)
+        # Send descriptive error message.
         await kiyo_utils.sendmsgsecure(inter, file = file, embed = embed, ephemeral = True)
 
 
