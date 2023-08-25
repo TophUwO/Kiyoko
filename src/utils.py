@@ -94,9 +94,9 @@ def fmtdtoolembed(app, title: str, desc: str, fields: Optional[list[tuple[str, a
 # execution.
 #
 # Returns embed and thumbnail file.
-def cfgupdembed(app, *, inter: discord.Interaction, desc: str, upd: list[tuple[str, any, any]], extra: str = None) -> tuple[discord.Embed, discord.File]:
+def cfgupdembed(*, inter: discord.Interaction, desc: str, upd: list[tuple[str, any, any]], extra: str = None) -> tuple[discord.Embed, discord.File]:
     # Get thumbnail from local file.
-    file = discord.File(app.resman.getresource('settings').url, filename = 'settings.png')
+    file = discord.File(inter.client.resman.getresource('settings').url, filename = 'settings.png')
 
     # Get clean list, without possible 'None' items.
     clupd = [x for x in upd if x is not None]
@@ -138,8 +138,8 @@ def cfgupdembed(app, *, inter: discord.Interaction, desc: str, upd: list[tuple[s
 # Helper function to format a guild configuration view embed.
 #
 # Returns embed and used thumbnail file.
-def fmtcfgviewembed(app, *, inter: discord.Interaction, desc: str) -> tuple[discord.Embed, discord.File]:
-    file = discord.File(app.resman.getresource('settings').url, filename = 'settings.png')
+def fmtcfgviewembed(*, inter: discord.Interaction, desc: str) -> tuple[discord.Embed, discord.File]:
+    file = discord.File(inter.client.resman.getresource('settings').url, filename = 'settings.png')
     return (fmtembed(
         color  = 0x28AEFF,
         title  = 'Guild Configuration',
@@ -155,7 +155,7 @@ def fmtcfgviewembed(app, *, inter: discord.Interaction, desc: str) -> tuple[disc
 # Returns number of application commands currently registered in the
 # internal command tree.
 def nappcmds(app) -> int:
-     return sum(1 for x in app.tree.walk_commands() if type(x) == discord.app_commands.Command)
+     return sum(1 for x in app.tree.walk_commands() if isinstance(x, discord.app_commands.Command))
 
 
 

@@ -415,7 +415,6 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
 
             # Respond with success message.
             (embed, file) = kiyo_utils.cfgupdembed(
-                app = self._app,
                 inter = inter,
                 desc  = 'reddit',
                 upd   = [],
@@ -459,7 +458,6 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
 
             # Prepare and send confirmation message.
             (embed, file) = kiyo_utils.cfgupdembed(
-                app = self._app,
                 inter = inter,
                 desc  = 'reddit',
                 upd   = [],
@@ -490,7 +488,6 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
 
         # Prepare and send response.
         (embed, file) = kiyo_utils.fmtcfgviewembed(
-            app   = self._app,
             inter = inter,
             desc  = extra
         )
