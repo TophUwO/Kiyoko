@@ -10,9 +10,8 @@
 # imports
 import os
 import sqlite3, aiosqlite
-from loguru import logger
 
-import src.config as kiyo_cfg
+from loguru import logger
 
 
 
@@ -22,10 +21,9 @@ class DatabaseConnectionError(Exception):
         self.message = 'Invalid database connection object.'
 
 
-
 # This class holds the database connection.
 class KiyokoDatabaseManager(object):
-    def __init__(self, cfg: kiyo_cfg.KiyokoGlobalConfig):
+    def __init__(self, cfg):
         # Get required settings from config.
         dbdir    = cfg.getvalue('global', 'dbdir')
         dbpath   = dbdir + '/' + cfg.getvalue('global', 'dbfile')

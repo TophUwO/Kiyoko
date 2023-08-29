@@ -36,11 +36,11 @@ class KiyokoApplication(commands.Bot):
         self.stime = int(time.time())
 
         # Check for new version.
-        #self._nver = self.__getlatestversion()
-        #self._cver = self.cfg.getvalue('upd', 'version')
-        #if self._nver[0]:
-        #    logger.warning(f'A new version of Kiyoko is available: {self._nver[1]}')
-        #logger.info(f'Current Kiyoko version: {self._cver}')
+        self._nver = self.__getlatestversion()
+        self._cver = self.cfg.getvalue('upd', 'version')
+        if self._nver[0]:
+            logger.warning(f'A new version of Kiyoko is available: {self._nver[1]}')
+        logger.info(f'Current Kiyoko version: {self._cver}')
 
         # Initialize discord.py bot client.
         super().__init__(
@@ -51,7 +51,7 @@ class KiyokoApplication(commands.Bot):
             intents        = discord.Intents().all()
         )
 
-        # Establish database connection.
+        # Initialize database manager.
         self.dbman  = kiyo_db.KiyokoDatabaseManager(self.cfg)
         # Initialize module manager.
         self.modman = kiyo_mod.KiyokoModuleManager(self)
@@ -59,6 +59,8 @@ class KiyokoApplication(commands.Bot):
         self.gcman  = kiyo_mguild.KiyokoGuildConfigManager(self)
         # Initialize resource manager.
         self.resman = kiyo_res.KiyokoResourceManager(self)
+        # Initialize command manager.
+        self.cmdman = kiyo_cfg.KiyokoCommandManager(self)
 
 
     # Reimplements the 'on_ready' event handler.
@@ -71,6 +73,11 @@ class KiyokoApplication(commands.Bot):
         await self.gcman.loadgconfig()
         # Load modules.
         await self.modman.loadmodules()
+
+        # Load global command info.
+        await self.cmdman.readstate()
+        # Start sync task.
+        self.cmdman.startsynctask()
 
         ## We are done setting things up and are now ready.
         logger.info(f'Kiyoko is now available as \'{self.user}\'. Ready.')

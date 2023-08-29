@@ -10,14 +10,16 @@
 # imports
 import enum, json, easy_pil
 
+from typing      import Optional, Self
 from loguru      import logger
-from dataclasses import dataclass
+from dataclasses import *
 
 
 
 # resource types
 class KiyokoResourceType(enum.Enum):
-    LOCALIMG = 0 # image files saved on the local disk
+    INVALID  = -1 # invalid type, denotes error
+    LOCALIMG = 0  # image files saved on the local disk
 
 
 # class holding a resource (url)
@@ -25,7 +27,20 @@ class KiyokoResourceType(enum.Enum):
 class KiyokoResource:
     id:    str                # id to use for referencing the resource
     type:  KiyokoResourceType # resource type
-    url:   str                # resource URL
+    url:   Optional[str] = '' # resource URL
+
+    # Updates a resource. Only updates the fields that are given.
+    #
+    # Returns nothing.
+    def update(self, **kwargs) -> Self:
+        # Save current state.
+        old = replace(self)
+
+        # Update given fields.
+        self.url = kwargs.get('url', self.url)
+
+        # Return old state.
+        return old
 
 
 
@@ -83,32 +98,60 @@ class KiyokoResourceManager(object):
                 continue
 
             # Register the resource.
-            self.__regresource(rid, url)
+            self.regresource(rid, KiyokoResourceType.LOCALIMG, url = url)
             n += 1
 
         # Send info message.
         logger.debug(f'Loaded {n} of {len(res2load)} resources from \'{fname}\'.')
 
 
-    # Creates a new resource object and stores it inside
-    # the resource manager dictionary.
+    # Creates a new resource object and stores it inside the resource
+    # manager dictionary.
     #
     # Returns nothing.
-    def __regresource(self, rid: str, url: str) -> None:
+    def regresource(self, rid: str, ty: KiyokoResourceType, **kwargs) -> None:
         # Construct resource object and insert it into the dictionary.
-        self._res[rid] = KiyokoResource(rid, KiyokoResourceType.LOCALIMG, url)
+        self._res[rid] = KiyokoResource(
+            rid,
+            ty,
+            **kwargs
+        )
 
         # Everything went well.
-        logger.debug(f'Registered resource \'{rid}\' (url: {url}).')
+        logger.debug(f'Registered resource \'{rid}\' (type: {ty.name}).')
+
+
+    # Removes a resource object from the internal storage. After this call,
+    # it cannot be retrieved any longer.
+    # If the resource ID is not registered, this function does nothing.
+    #
+    # Returns old resource object. If the resource ID is not registered,
+    # the function returns None.
+    def unregresource(self, rid: str) -> KiyokoResource | None:
+        found = None
+        
+        try:
+            found = self._res.pop(rid)
+        except KeyError:
+            pass
+
+        return found
+
+
+    # Updates an already registered resource. Note that the ID and the resource type
+    # cannot be changed retroactively.
+    #
+    # Returns old resource info. If the resource with the given ID is not registered,
+    # the function returns None. The resource storage is not touched.
+    def updresource(self, rid: str, **kwargs) -> KiyokoResource | None:
+        # Update resource and return previous one.
+        return self._res[rid].update(**kwargs) if self.getresource(rid) is not None else None
 
 
     # Retrieves a resource with a given identifier.
     #
     # Returns resource object, or None if the resource could not be found.
     def getresource(self, rid: str) -> KiyokoResource | None:
-        if self._res.get(rid) is None:
-            return None
-
-        return self._res[rid]
+        return self._res.get(rid, None)
 
 

@@ -8,7 +8,7 @@
 # main.py - application entrypoint
 
 # imports
-import os, asyncio
+import os
 from loguru import logger
 
 import src.app as kiyo_app

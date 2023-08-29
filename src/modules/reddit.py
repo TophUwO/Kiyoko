@@ -234,6 +234,7 @@ class KiyokoSubredditManager:
         except Exception as tmp_e:
             logger.error(f'Could not update feed. Reason: {tmp_e}')
 
+
     # This function formats the embed that will be sent to all subscribers of a given subreddit that has just
     # been submitted a new post.
     # 
@@ -307,6 +308,8 @@ class KiyokoSubredditManager:
         # return and try again when the next iteration starts.
         if self._subl is None and len(self._feed) > 0:
            await self.__buildfeed()
+        elif self._subl is None:
+            return
 
         # Wait for new submissions to come in any of the subs in the feed.
         newlatest = ''
@@ -382,6 +385,8 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
         subreddit = 'subreddit that is to be listened to; can be with or without \'r/\'; must be exact',
         broadcast = 'channel to broadcast sub-reddit submissions to'
     )
+    @discord.app_commands.check(kiyo_utils.isenabled)
+    @discord.app_commands.check(kiyo_utils.updcmdstats)
     async def cmd_add(self, inter: discord.Interaction, subreddit: str, broadcast: discord.TextChannel) -> None:
         # Check if the application has 'send_messages' and 'attach_files' permissions
         # in the given broadcast channel.
@@ -443,6 +448,8 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
     @discord.app_commands.command(name = 'rem', description = 'unsubscribes from a specific subreddit')
     @discord.app_commands.describe(subreddit = 'subreddit name to unsubscribe from; must be exact')
     @discord.app_commands.autocomplete(subreddit = __cmd_rem_autocmpl)
+    @discord.app_commands.check(kiyo_utils.isenabled)
+    @discord.app_commands.check(kiyo_utils.updcmdstats)
     async def cmd_rem(self, inter: discord.Interaction, subreddit: str) -> None:
         subn = subreddit.strip()
 
@@ -474,6 +481,8 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
     #
     # Returns nothing.
     @discord.app_commands.command(name = 'list', description = 'lists all active subreddit listeners for the current guild')
+    @discord.app_commands.check(kiyo_utils.isenabled)
+    @discord.app_commands.check(kiyo_utils.updcmdstats)
     async def cmd_list(self, inter: discord.Interaction) -> None:
         # Get guild config for current guild.
         gcfg = self._app.gcman.getgconfig(inter.guild.id)

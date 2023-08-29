@@ -74,24 +74,14 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
             yield id
 
 
-    # Checks whether the command invoker is actually a registered developer or the app
-    # owner.
-    #
-    # Returns True if yes, if not raises an MsgCmd_NotADeveloper exception.
-    async def __isadev(self, ctx: commands.Context) -> bool:
-        # If owner ID is not set, query it.
-        self._appowner = self._appowner or (await self._app.application_info()).owner.id
-    
-        if not ctx.author.id in self._devids and ctx.author.id != self._appowner:
-            raise kiyo_error.MsgCmd_NotADeveloper
-    
-        return True
-
-
     # Parent command for '/env'. Handles developer management.
     #
     # Returns nothing.
     @commands.group(name = 'env', pass_context = True)
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def msgcmd_env(self, ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
             raise kiyo_error.MsgCmd_InvalidSubCommand
@@ -103,9 +93,11 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @msgcmd_env.command(name = 'get')
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def cmd_get(self, ctx: commands.Context, settings: Optional[str]) -> None:
-        await self.__isadev(ctx)
-
         # Get list of settings from input. This will filter out duplicate settings
         # by default. If 'settings' is not set or explicitly set to 'all', all settings
         # in the 'global' section will be retrieved. 
@@ -146,10 +138,11 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @msgcmd_env.command(name = 'set')
-    @commands.check(kiyo_utils.msgcmd_ispm)
-    async def cmd_set(self, ctx: commands.Context, option: str, value: str, flush: Optional[bool]) -> None:
-        await self.__isadev(ctx)
-
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
+    async def cmd_set(self, ctx: commands.Context, option: str, value: str, flush: Optional[bool] = True) -> None:
         # Check if given settings key exists.
         option = option.strip()
         oldval = self._app.cfg.getvalue('global', option, None)
@@ -172,12 +165,40 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         await kiyo_utils.sendmsgsecure(ctx, embed = embed, file = file)
 
 
+    # Adds a new field to the [global] section of the global configuration file. Optionally,
+    # the user can provide an initial value. This command can only be used by developers.
+    #
+    # Returns nothing.
+    @msgcmd_env.command(name = 'add')
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
+    async def cmd_add(self, ctx: commands.Context, option: str, initval: Optional[str], flush: Optional[bool] = True) -> None:
+        pass
+
+
+    # Removes a field from the [global] section of the global configuration file. This command
+    # can only be invoked by developers.
+    #
+    # Returns nothing.
+    @msgcmd_env.command(name = 'del')
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
+    async def cmd_rem(self, ctx: commands.Context, option: str, flush: Optional[bool] = True) -> None:
+        pass
+
+
     # Parent command for '/dev'. Handles developer management.
     #
     # Returns nothing.
     @commands.group(name = 'dev', pass_context = True)
-    @commands.is_owner()
-    @commands.check(kiyo_utils.msgcmd_ispm)
+    @commands.check(kiyo_utils.isappowner)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def msgcmd_dev(self, ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
             raise kiyo_error.MsgCmd_InvalidSubCommand
@@ -189,8 +210,10 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @msgcmd_dev.command(name = 'reg')
-    @commands.is_owner()
-    @commands.check(kiyo_utils.msgcmd_ispm)
+    @commands.check(kiyo_utils.isappowner)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def msgcmd_reg(self, ctx: commands.Context, userid: str) -> None:
         userid = int(userid)
 
@@ -225,8 +248,10 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @msgcmd_dev.command(name = 'unreg')
-    @commands.is_owner()
-    @commands.check(kiyo_utils.msgcmd_ispm)
+    @commands.check(kiyo_utils.isappowner)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def cmd_unreg(self, ctx: commands.Context, userid: str) -> None:
         userid = int(userid)
 
@@ -253,8 +278,10 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @msgcmd_dev.command(name = 'list')
-    @commands.is_owner()
-    @commands.check(kiyo_utils.msgcmd_ispm)
+    @commands.check(kiyo_utils.isappowner)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def cmd_list(self, ctx: commands.Context) -> None:
         # Prepare message description.
         i    = 1
@@ -279,11 +306,11 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @commands.command(name = 'status')
-    @commands.is_owner()
-    @commands.check(kiyo_utils.msgcmd_ispm)
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
     async def msgcmd_status(self, ctx: commands.Context) -> None:
-        await self.__isadev(ctx)
-
         # Query information to be displayed.
         appname   = self._app.cfg.getvalue('global', 'name', 'Kiyoko')
         nguilds   = len(self._app.guilds)
@@ -321,9 +348,19 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     #
     # Returns nothing.
     @commands.command(name = 'sync')
-    @commands.check(kiyo_utils.msgcmd_ispm)
-    async def msgcmd_sync(self, ctx: commands.Context, guild: Optional[discord.Guild]) -> None:
-        await self.__isadev(ctx)
+    @commands.check(kiyo_utils.isadev)
+    @commands.check(kiyo_utils.ispmcontext)
+    @commands.check(kiyo_utils.isenabled)
+    @commands.check(kiyo_utils.updcmdstats)
+    async def msgcmd_sync(self, ctx: commands.Context, guild: Optional[discord.Guild | str]) -> None:
+        # If 'guild' is a special key-word, get the developer guild of this application.
+        if isinstance(guild, str) and guild.lower() in ['dev', 'debug', 'dbg', 'developer']:
+            dgid = self._app.cfg.getvalue('global', 'devguild')
+            if dgid is None or dgid == '':
+                raise kiyo_error.MsgCmd_InvalidConfiguration
+
+            guild = ctx.bot.get_guild(int(dgid))
+        # Check whether to sync globally or locally.
         ispriv = guild is not None or False
 
         # Sync commands locally or globally, depending on 'ispriv'.
@@ -364,10 +401,10 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         # If the error is that the command can only be invoked from a PM, or if the invoker is not
         # a registered developer or the owner of the application, ignore the error (i.e. do not even
         # send an error message).
-        if isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not await self.__isadev(ctx):
+        if isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not await kiyo_utils.isadev(ctx):
             logger.error(
                 f'Developer-only command invoked by non-developer \'{ctx.author.name}\' '
-                f'(id: {ctx.author.id}) or invoked in a non-PM channel.'
+                f'(id: {ctx.author.id}) or invoked by a developer in a non-PM channel.'
             )
 
             return

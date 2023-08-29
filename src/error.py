@@ -78,6 +78,17 @@ class MsgCmd_AlreadyDev(CommandError):
 class MsgCmd_InvalidSubCommand(CommandError):
     pass
 
+# This exception is thrown whenever a command depends on a misconfigured
+# setting.
+class MsgCmd_InvalidConfiguration(CommandError):
+    pass
+
+# This exception is thrown whenever a command is being invoked that is currently
+# globally disabled.
+class MsgCmd_CommandDisabled(discord.app_commands.AppCommandError):
+    pass
+
+
 
 
 # Error code dictionary, mapping error codes to a string that will
@@ -89,6 +100,8 @@ gl_errordesc: dict[type, str] = {
     MissingPermissions:               'You require higher permissions in order to execute this command.',
     BotMissingPermissions:            'The application does not have the required permissions.',
     CommandOnCooldown:                'The command is on cooldown.',
+    CommandSignatureMismatch:         'Command signatures are incongruent; this is likely because '
+                                      'of a command update without a sync. Contact the owner of the application.',
     AppCmd_InvalidParameter:          'A command parameter is invalid.',
     AppCmd_MissingChannelPermissions: 'The application is missing channel permissions.',
     AppCmd_NotApplicationOwner:       'This command can only be invoked by the owner of this application.',
@@ -108,7 +121,9 @@ gl_errordesc: dict[type, str] = {
     MsgCmd_NoDev:                     'The user with the given ID is not registered as a developer.',
     MsgCmd_NoSuchUser:                'A user with the given ID does not exist.',
     MsgCmd_AlreadyDev:                'The user with the given ID is already registered as a developer.',
-    MsgCmd_InvalidSubCommand:         'Tried to invoke a sub-command that does not exist.'
+    MsgCmd_InvalidSubCommand:         'Tried to invoke a sub-command that does not exist.',
+    MsgCmd_InvalidConfiguration:      'Could not invoke command due to invalid configuration.',
+    MsgCmd_CommandDisabled:           'The command or sub-command that was being invoked is globally disabled.'
 }
 
 
@@ -121,7 +136,7 @@ def cmderrembed(
     app,
     *,
     inter: discord.Interaction | Context,
-    err: discord.app_commands.AppCommandError | CommandError
+    err: AppCommandError | CommandError
 ) -> tuple[discord.Embed, discord.File]:
     # Get thumbnail from local file.
     file = discord.File(app.resman.getresource('error').url, filename = 'error.png')
@@ -137,10 +152,11 @@ def cmderrembed(
 
     # Generate fancy explanatory embed.
     return (kiyo_utils.fmtembed(
-        color  = 0xFF3030,
-        title  = f'{"Application" if isinstance(inter, discord.Interaction) else "Message"} Command Error',
-        desc   = f'While processing command ``{fname}``, an error occurred. Please use '
-                 f'``{app.cfg.getvalue("global", "prefix", "/")}help commands:{fname}`` for detailed usage of this command.',
+        color  = 0xE74C3C,
+        title  = f'Command Error',
+        desc   = f'While invoking command ``{fname}``, an error occurred. Please use '
+                 f'</help:1144501967494844460> with ``commands:{fname}`` for detailed usage of this command. '
+                  'Also refer to the error message given below (see ``Description``).',
         fields = [('Description', errmsg or f'Unknown error ({type(err).__name__}).', False)],
         thumb  = 'attachment://error.png'
     ), file)
@@ -163,14 +179,17 @@ class KiyokoCommandTree(discord.app_commands.CommandTree):
                 'signature from the global command tree.'
             )
         else:
+            typename = type(err.original if hasattr(err, '') else err).__name__
+            typedesc = gl_errordesc.get(type(err.original if hasattr(err, 'original') else err))
             guildstr = inter.guild.name if inter.guild is not None else 'none'
             logger.error(
                 f'Exception in command \'{inter.data.get("name")}\' (guild: \'{guildstr}\'). '
-                f'Desc: {gl_errordesc.get(type(err.original)) or type(err.original).__name__}'    
+                f'Desc: {typedesc or typename}'    
             )
 
         # Prepare embed.
-        (embed, file) = cmderrembed(self.client, inter = inter, err = AppCmd_NotFound() if inter.command is None else err.original)
+        exctype       = err.original if hasattr(err, 'original') else err
+        (embed, file) = cmderrembed(self.client, inter = inter, err = AppCmd_NotFound() if inter.command is None else exctype)
         # Send descriptive error message.
         await kiyo_utils.sendmsgsecure(inter, file = file, embed = embed, ephemeral = True)
 

@@ -5,12 +5,19 @@
 # (c) 2023 TophUwO All rights reserved.                        #
 ################################################################
 
-# config.py - managing global configuration
+# config.py - managing global and guild-specific configuration
 
 # imports
-import configparser
+import time, dataclasses
+import configparser, asyncio
 
-from loguru import logger
+from dataclasses import dataclass
+from loguru      import logger
+from typing      import Self
+
+import discord.ext.tasks as tasks
+
+import src.utils as kiyo_utils
 
 
 
@@ -21,7 +28,6 @@ class TokenError(Exception):
 # Raise this exception if there are keys missing in the config file.
 class ConfigError(Exception):
     pass
-
 
 
 # This class holds all configuration options the bot supports alongside
@@ -120,7 +126,7 @@ class KiyokoGlobalConfig(object):
     def writeconfig(self, fname: str = None) -> None:
         if self._changed == False:
             return
-        fname = None or 'conf/.env'
+        fname = fname or 'conf/.env'
 
         # Write all values.
         try:
@@ -133,7 +139,7 @@ class KiyokoGlobalConfig(object):
 
         # Everything went well.
         self._changed = False
-        logger.success('Successfully wrote global configuration to file.')
+        logger.success(f'Successfully wrote global configuration to file \'{fname}\'.')
 
 
     # Validates the dictionary generated from .env.
@@ -167,5 +173,229 @@ class KiyokoGlobalConfig(object):
 
         # Everything seems to be alright.
         return True
+
+
+
+# class representing a command info entry
+@dataclass
+class KiyokoCommandInfo:
+    cmdname: str          # qualified (full) command name
+    added:   int          # UNIX timestamp of when the command was added
+    enabled: bool         # whether or not the command is globally enabled
+    count:   int          # total global count of invocations
+    lastuse: int          # UNIX timestamp of when the command was last invoked (globally)
+    delflag: bool = False # whether or not to delete the command when the state is written the next time
+
+    # Updates the current command info.
+    # Fields that do not exist will not be updated.
+    # cmdname, added cannot be updated.
+    #
+    # Returns the old info.
+    def update(self, **kwargs) -> Self:
+        old = dataclasses.replace(self)
+
+        self.enabled = kwargs.get('enabled', self.enabled)
+        self.count   = kwargs.get('count', self.count)
+        self.lastuse = kwargs.get('lastuse', self.lastuse)
+
+        return old
+
+
+# class globally managing commands
+class KiyokoCommandManager:
+    def __init__(self, app):
+        self._app = app
+
+        # Init command info cache.
+        self._changed: bool = False
+        self._cache: dict[str, KiyokoCommandInfo] = dict()
+
+
+    def __del__(self):
+        # Write current cache to database.
+        asyncio.get_event_loop().run_until_complete(self.writestate())
+
+
+    # Adds a command to the cache, creating a fresh entry.
+    # If an entry belonging to this command already exists, this function
+    # will not do anything. To write the changes to the database, 'writestate()'
+    # must be called.
+    #
+    # Returns nothing.
+    def addcommand(self, info: KiyokoCommandInfo) -> None:
+        # If a command with the given name already exists, do nothing.
+        if self._cache.get(info.cmdname, None) is not None:
+            return
+
+        self._changed = True
+        self._cache[info.cmdname] = info
+
+
+    # Removes a command from the cache. If the command does
+    # not exist, the function does nothing. To write the changes
+    # to the database, 'writestate()' must be called.
+    #
+    # Returns old command info, or None if the command did not exist.
+    def remcommand(self, cid: str) -> KiyokoCommandInfo | None:
+        old = None
+        try:
+            self._cache[cid].delflag = True
+            self._changed = True
+        except KeyError:
+            pass
+
+        return old
+
+
+    # Retrieves the info for the command with the given command ID.
+    # This will never issue a database call; the data is retrieved
+    # from the cache.
+    #
+    # Returns KiyokoCommandInfo object, or None if the command could
+    # not be found.
+    def getcommandinfo(self, cid: str) -> KiyokoCommandInfo | None:
+        info = self._cache.get(cid, None)
+        if info is None:
+            return None
+
+        return None if info.delflag else info
+
+
+    # Updates a specific command's info. Only the given parameters will
+    # be updated. If the command is not registered, the function does
+    # nothing.
+    #
+    # Returns the old info, or None if the command is not registered.
+    def updcommandinfo(self, cid: str, **kwargs) -> KiyokoCommandInfo | None:
+        info = self._cache.get(cid, None)
+        if info is None:
+            return None
+
+        self._changed = True
+        return info.update(**kwargs)
+
+
+    # Creates a generator that can be used to iterate over all current
+    # command info entries in the cache.
+    #
+    # Returns generator.
+    def commandinfos(self) -> KiyokoCommandInfo:
+        for info in self._cache.values():
+            if not info.delflag:
+               yield info
+
+
+    # A command that manually starts the sync background task.
+    # If the task is already running, the function does nothing.
+    #
+    # Returns nothing.
+    def startsynctask(self) -> None:
+        if not self.on_flush_db.is_running():
+            self.on_flush_db.start()
+
+
+    # Loads the current persistent database state into the
+    # command info cache.
+    #
+    # Returns nothing.
+    async def readstate(self) -> None:
+        # Establish connection to database.
+        conn, cur = await self._app.dbman.newconn()
+
+        # Read all command entries from database.
+        await cur.execute('SELECT * FROM commandinfo')
+        qres = await cur.fetchall()
+
+        # Populate the cache.
+        for row in qres:
+            (cmdname, added, enabled, count, lastuse) = row
+
+            # Generate command info object.
+            self.addcommand(KiyokoCommandInfo(
+                cmdname,
+                added,
+                enabled,
+                count,
+                lastuse
+            ))
+
+        # Close connection.
+        await cur.close()
+        await conn.close()
+
+
+    # Writes the current cache state to the database. This should
+    # be done periodically in a background task. If nothing is
+    # to be written (i.e. because nothing has changed since last write),
+    # this function does nothing.
+    #
+    # Returns nothing.
+    async def writestate(self) -> None:
+        if not self._changed:
+            return
+
+        # Establish database connection.
+        conn, cur = await self._app.dbman.newconn()
+
+        # Write state to table.
+        sql = 'INSERT OR REPLACE INTO commandinfo VALUES(\'{}\', {}, {}, {}, {})'
+        for cmd in self._cache.values():
+            # Delete all command entries that have been marked as deleted before.
+            if cmd.delflag:
+                 await cur.execute(f'DELETE FROM commandinfo WHERE cmdname = \'{cmd.cmdname}\'')
+                 
+                 continue
+
+            # Otherwise update with new state.
+            await cur.execute(sql.format(cmd.cmdname, cmd.added, int(cmd.enabled), cmd.count, cmd.lastuse))
+
+        # Flush db.
+        self._changed = False
+        await conn.commit()
+        await cur.close()
+        await conn.close()
+
+
+    # Synchronizes the database and the cache with the currently registered
+    # set of commands. If there are any new commands or commands that have
+    # been removed before the database was last flushed, these changes will
+    # now take effect.
+    #
+    # Returns nothing.
+    async def sync(self) -> None:
+        # Get list of currently registered message and application commands.
+        lcmds = set([cmd.qualified_name for cmd in kiyo_utils.allcommands(self._app)])
+        # Get list of commands in cache/database.
+        ccmds = set([x.cmdname for x in self.commandinfos()])
+
+        # Compile the list of commands that have to be changed (i.e. added (0), removed (1)) and
+        # apply the changes.
+        for (cmd, op) in [(x, 0) for x in lcmds - ccmds] + [(x, 1) for x in ccmds - lcmds]:
+            if op == 0:
+                # Add command to cache.
+                self.addcommand(KiyokoCommandInfo(
+                    cmd,
+                    int(time.time()),
+                    True,
+                    0,
+                    0
+                ))
+            elif op == 1:
+                # Remove command from cache.
+                self.remcommand(cmd)
+
+            # Print message.
+            logger.debug(f'Updated command \'{cmd}\' (op = {op}).')
+
+        # Write updated cache to database.
+        await self.writestate()
+
+
+    # Task that periodically flushes the database to reflect the current state.
+    #
+    # Returns nothing.
+    @tasks.loop(hours = 1)
+    async def on_flush_db(self) -> None:
+        await self.writestate()
 
 

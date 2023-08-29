@@ -8,7 +8,7 @@
 # utils.py - various utility functions needed in the entire application
 
 # imports
-import discord, datetime
+import discord, datetime, time
 
 from loguru import logger
 from typing import Optional
@@ -158,21 +158,125 @@ def nappcmds(app) -> int:
      return sum(1 for x in app.tree.walk_commands() if isinstance(x, discord.app_commands.Command))
 
 
+# Returns a set of all registered message and application commands.
+# This includes both group (parent) commands and normal commands.
+#
+# Returns set holding all currently registered command instances.
+def allcommands(app) -> set:
+    # TODO: Expand child commands for prefix.
+    return set([x for x in app.tree.walk_commands()] + [x for x in app.commands])
+
+
+# Generates a list of strings from a comma-separated string.
+#
+# Returns list of strings.
+def listfromstr(src: str, sep: str) -> list[str]:
+    return src.strip().replace(' ', '').split(sep)
+
+
+# Retrieves the total parameter count (including required and optional) parameters
+# for a given application or prefix (message) command.
+#
+# Returns count.
+def numcmdargs(cmd) -> int:
+    return len(cmd.parameters) if hasattr(cmd, 'parameters') else 0
+
+
 
 # Checks whether the application has the required permissions in the given channel.
 #
 # Returns True if the permission requirements are met, False if not.
 def haschanperms(inter: discord.Interaction, chan: discord.abc.GuildChannel, perms: discord.Permissions) -> bool:
     # Get app permissions for the given channel.
-    appperms = chan.permissions_for(inter.guild.get_member(inter.user.id))
+    appperms = chan.permissions_for(inter.guild.get_member(inter.client.user.id))
 
     # Check whether the app satisfies all required channel permissions.
-    return appperms | perms == appperms
+    return perms & appperms == perms
 
 
-def msgcmd_ispm(ctx: commands.Context) -> bool:
+# Checks whether a command has a certain check.
+#
+# Returns True if the command depends on the given check,
+# False if not.
+def hascheck(cmd, check) -> bool:
+    return hasattr(cmd, 'checks') and check.__qualname__ in [check.__qualname__ for check in cmd.checks]
+
+
+
+# Checks whether the command invoker is actually a registered developer or the app
+# owner.
+#
+# Returns True if yes, if not raises an MsgCmd_NotADeveloper exception.
+async def isadev(ctx: discord.Interaction | commands.Context) -> bool:
+    uid = ctx.author if isinstance(ctx, commands.Context) else ctx.user
+    app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
+    
+    # If the user is not a registered developer and not the owner of the application,
+    # raise the exception describing the error.
+    if not uid in listfromstr(app.cfg.getvalue('upd', 'devids', ''), ',') and not await app.is_owner(uid):
+        raise kiyo_error.MsgCmd_NotADeveloper
+
+    # Nothing failed, so the user is a registered developer OR the owner
+    # of the app, which implies developership.
+    return True
+
+
+# A simple check that allows us to verify that a command is invoked 
+# from a PM. This is a requirement for all developer commands.
+#
+# Returns True if the context is PM, otherwise it raises a MsgCmd_OnlyPMChannel
+# exception.
+def ispmcontext(ctx: discord.Interaction | commands.Context) -> bool:
     if ctx.guild is not None:
         raise kiyo_error.MsgCmd_OnlyPMChannel
+
+    return True
+
+
+# A simple check verifying that the command invoker is the owner
+# of the application.
+#
+# Returns True if the command invoker is the owner of the app,
+# raises MissingPermissions if not.
+async def isappowner(ctx: discord.Interaction | commands.Context) -> bool:
+    uid = ctx.author if isinstance(ctx, commands.Context) else ctx.user
+    app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
+
+    # Raise the exception if the invoker is not the owner.
+    if await app.is_owner(uid):
+        raise discord.app_commands.MissingPermissions('')
+
+    return True
+
+
+# A simple check that verifies that the command we are using is
+# globally enabled. If the command info could not be retrieved,
+# we assume the command is enabled.
+#
+# Returns True if the command is enabled, or raises an exception if it
+# is not.
+def isenabled(ctx: discord.Interaction | commands.Context) -> bool:
+    cmd = ctx.command
+    app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
+    
+    info = app.cmdman.getcommandinfo(cmd.qualified_name)
+    if info is not None and not info.enabled:
+        raise kiyo_error.MsgCmd_CommandDisabled
+
+    return True
+
+
+
+# Let's abuse a check to update the command info cache before we invoke
+# the command. Hence, this check cannot fail.
+#
+# Returns True.
+def updcmdstats(ctx: discord.Interaction | commands.Context) -> bool:
+    cmd = ctx.command
+    app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
+
+    info = app.cmdman.getcommandinfo(cmd.qualified_name)
+    app.cmdman.updcommandinfo(cmd.qualified_name, count = info.count + 1, lastuse = int(time.time()))
 
     return True
 

@@ -11,6 +11,7 @@
 -- Force UTF-8 encoding.
 PRAGMA encoding = 'UTF-8';
 
+
 -- Create 'guilds' table, holding general data regarding
 -- guilds (servers).
 CREATE TABLE guilds (
@@ -23,6 +24,7 @@ CREATE TABLE guilds (
     )
 );
 
+
 -- Create 'guildsettings' table, holding guild-specific
 -- configuration such as command prefix, server alias, etc.
 CREATE TABLE guildsettings (
@@ -31,6 +33,20 @@ CREATE TABLE guildsettings (
 
     PRIMARY KEY (
         guildid
+    )
+);
+
+
+-- Create 'commandinfo' table, holding global command information
+CREATE TABLE commandinfo (
+    cmdname TEXT NOT NULL,             -- name of command (full qualified name)
+    added   INTEGER,                   -- unix timestamp of when the command was registered
+    enabled BOOLEAN,                   -- whether or not the command is currently globally enabled
+    count   INTEGER        DEFAULT(0), -- global command usage count
+    lastuse INTEGER,                   -- UNIX timestamp of when the command was invoked last 
+
+    PRIMARY KEY (
+        cmdname
     )
 );
 
