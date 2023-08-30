@@ -401,7 +401,13 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         # If the error is that the command can only be invoked from a PM, or if the invoker is not
         # a registered developer or the owner of the application, ignore the error (i.e. do not even
         # send an error message).
-        if isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not await kiyo_utils.isadev(ctx):
+        isdev = False
+        try:
+            isdev = await kiyo_utils.isadev(ctx)
+        except:
+            pass
+
+        if isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not isdev:
             logger.error(
                 f'Developer-only command invoked by non-developer \'{ctx.author.name}\' '
                 f'(id: {ctx.author.id}) or invoked by a developer in a non-PM channel.'
