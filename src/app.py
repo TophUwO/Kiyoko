@@ -76,6 +76,8 @@ class KiyokoApplication(commands.Bot):
 
         # Load global command info.
         await self.cmdman.readstate()
+        # Sync for the first time.
+        await self.cmdman.sync()
         # Start sync task.
         self.cmdman.startsynctask()
 

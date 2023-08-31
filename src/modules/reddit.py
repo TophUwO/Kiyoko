@@ -16,6 +16,7 @@ import configparser
 
 from loguru       import logger
 from urllib.parse import urlparse
+from typing       import Optional
 
 import discord.ext.tasks as tasks
 
@@ -102,8 +103,8 @@ class KiyokoSubredditManager:
 
         # Init data-structure.
         # key:   str                   => name
-        # value: list[tuple[int, int]] => [gid, cid]
-        self._data: dict[str, list[tuple[int, int]]] = dict()
+        # value: list[tuple[int, int]] => [gid, cid, prole]
+        self._data: dict[str, list[tuple[int, int, int]]] = dict()
 
         # Start the stream.
         self.__on_scrape_newsubms.start()
@@ -133,7 +134,7 @@ class KiyokoSubredditManager:
                     self._feed.add(entry.get('id'))
 
                     # Add subreddit to data storage.
-                    self.addsubreddit(entry.get('id'), gcfg.gid, entry.get('broadcast'))
+                    self.addsubreddit(entry.get('id'), gcfg.gid, entry.get('broadcast'), entry.get('prole', 0))
                 except KeyError:
                     logger.error(f'Subreddit listener entry malformed: {entry}')
 
@@ -142,9 +143,9 @@ class KiyokoSubredditManager:
     # nothing will be done.
     #
     # Returns nothing.
-    def addsubreddit(self, subn: str, gid: int, cid: int) -> None:
+    def addsubreddit(self, subn: str, gid: int, cid: int, prole: int = 0) -> None:
          self._data[subn] = self._data.get(subn, None) or list()
-         self._data[subn].append((gid, cid))
+         self._data[subn].append((gid, cid, prole))
 
 
     # Removes a subreddit listener from the internal data storage.
@@ -154,12 +155,12 @@ class KiyokoSubredditManager:
     # Returns True if the listener was removed, False if not.
     def remsubreddit(self, subn: str, gid: int) -> bool:
         sublist = self._data.get(subn, [])
-        if gid in dict(sublist):
-            sublist.remove([(id, ch) for (id, ch) in sublist if id == gid][0])
+        try:
+            sublist.remove([(id, cid, prole) for (id, cid, prole) in sublist if id == gid][0])
+        except ValueError:
+            return False
 
-            return True
-
-        return False
+        return True
 
 
     # Queries the subreddit status for the given guild and subreddit.
@@ -215,11 +216,13 @@ class KiyokoSubredditManager:
     def __isguildsubbed(self, gid: int, name: str) -> bool:
         # Get subreddit entry.
         entry = self._data.get(name)
-        if entry is None:
-            return False
 
         # Check if guild is listening to the sub.
-        return gid in dict(entry)
+        for (guildid, _, _) in entry or []:
+            if gid == guildid:
+                return True
+
+        return False
 
 
     # Rebuilds the feed using the current list of subs that are listened to.
@@ -338,10 +341,11 @@ class KiyokoSubredditManager:
                     # Post the embed in every guild that subscribed to the sub the submission was
                     # posted in.
                     sublist = self._data.get(subm.subreddit_name_prefixed[2:], None)
-                    for (gid, chan) in sublist or []:
+                    for (gid, chan, prole) in sublist or []:
                         try:
                             gchan = self._app.get_guild(gid).get_channel(chan)
-                            await gchan.send(embed = embed)
+                            if gchan is not None:
+                                await gchan.send(content = f'<@&{prole}>' if prole != 0 else None, embed = embed)
                         except Exception as tmp_e:
                             logger.error(f'Could not send post to broadcast channel. Reason: {tmp_e}')
                 except Exception as tmp_e:
@@ -383,11 +387,12 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
     @discord.app_commands.command(name = 'add', description = f'subscribes to a new subreddit (max: {MAXLISTENERS})')
     @discord.app_commands.describe(
         subreddit = 'subreddit that is to be listened to; can be with or without \'r/\'; must be exact',
-        broadcast = 'channel to broadcast sub-reddit submissions to'
+        broadcast = 'channel to broadcast sub-reddit submissions to',
+        role      = 'optional role to ping whenever a submission is posted'
     )
     @discord.app_commands.check(kiyo_utils.isenabled)
     @discord.app_commands.check(kiyo_utils.updcmdstats)
-    async def cmd_add(self, inter: discord.Interaction, subreddit: str, broadcast: discord.TextChannel) -> None:
+    async def cmd_add(self, inter: discord.Interaction, subreddit: str, broadcast: discord.TextChannel, role: Optional[discord.Role]) -> None:
         # Check if the application has 'send_messages' and 'attach_files' permissions
         # in the given broadcast channel.
         reqperms = discord.Permissions(view_channel = True, embed_links = True, send_messages = True)
@@ -400,8 +405,8 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
         # If sub can be added, check if we have have not yet hit the maximum
         # number of listeners per guild.
         if status == KiyokoSubredditStatus.AVAILABLE:
-            gcfg = self._app.gcman.getgconfig(inter.guild.id)
-            # Create listener list if necessary.
+            roleid      = role.id if role is not None else 0
+            gcfg        = self._app.gcman.getgconfig(inter.guild.id)
             gcfg.reddit = gcfg.reddit or list()
 
             # If we have hit the maximum, cannot add more. Output an error
@@ -410,9 +415,9 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
                 raise kiyo_error.AllSlotsOccupied
 
             # Add sub to listener list.
-            gcfg.reddit.append({'id': name, 'broadcast': broadcast.id})
+            gcfg.reddit.append({'id': name, 'broadcast': broadcast.id, 'prole': roleid})
             # Add sub to data storage.
-            self._man.addsubreddit(name, inter.guild.id, broadcast.id)
+            self._man.addsubreddit(name, inter.guild.id, broadcast.id, roleid)
             # Update subreddit feed.
             await self._man.updfeed((name, True))
             # Update guild config.
@@ -490,10 +495,15 @@ class KiyokoCommandGroup_Reddit(discord.app_commands.Group):
         # Enumerate a string that contains all active subreddit listeners.
         nlisten = 1
         extra   = f'Active subreddit listeners for guild ``{inter.guild.name}`` (id: ``{inter.guild.id}``):\n'
-        for entry in gcfg.reddit:
-            extra += f'\n{nlisten}. ``r/{entry["id"]}``; bc: <#{entry["broadcast"]}>'
+        for entry in gcfg.reddit or []:
+            role = f'<@&{entry["prole"]}>' if entry['prole'] != 0 else '``not set``'
+            extra += f'\n{nlisten}. ``r/{entry["id"]}``; bc: <#{entry["broadcast"]}>; role: {role}'
 
             nlisten += 1
+
+        # If there are no active listeners, show an info message.
+        if nlisten == 1:
+            extra += '\nCould not find any active subreddit listeners.'
 
         # Prepare and send response.
         (embed, file) = kiyo_utils.fmtcfgviewembed(
