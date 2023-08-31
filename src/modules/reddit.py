@@ -214,11 +214,7 @@ class KiyokoSubredditManager:
     # Returns True if the guild is subscribed to the given sub,
     # False if not.
     def __isguildsubbed(self, gid: int, name: str) -> bool:
-        # Get subreddit entry.
-        entry = self._data.get(name)
-
-        # Check if guild is listening to the sub.
-        for (guildid, _, _) in entry or []:
+        for (guildid, _, _) in self._data.get(name) or []:
             if gid == guildid:
                 return True
 
