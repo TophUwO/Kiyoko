@@ -407,16 +407,16 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         except:
             pass
 
-        if isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not isdev:
+        # If the command could not be found, simply ignore it for it could have been meant for a
+        # different application, etc.
+        if ctx.command is None:
+            return
+        elif isinstance(err, kiyo_error.MsgCmd_OnlyPMChannel) or not isdev:
             logger.error(
-                f'Developer-only command invoked by non-developer \'{ctx.author.name}\' '
+                f'Developer-only command \'{ctx.command.qualified_name}\' invoked by non-developer \'{ctx.author.name}\' '
                 f'(id: {ctx.author.id}) or invoked by a developer in a non-PM channel.'
             )
 
-            return
-        # If the command could not be found, simply ignore it for it could have been meant for a
-        # different application, etc.
-        elif ctx.command is None:
             return
 
         # Prepare embed.
