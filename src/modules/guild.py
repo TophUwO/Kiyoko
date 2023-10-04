@@ -161,6 +161,9 @@ async def updgsettings(app, cfg: KiyokoGuildConfig, conn = None, cur = None) -> 
 #
 # Returns nothing.
 async def addgentry(app, gid: int, conn = None, cur = None) -> None:
+    # Get current time.
+    tnow = int(time.time())
+
     # Create connection and cursor object if needed.
     istmp = False
     if conn is None and cur is None:
@@ -200,7 +203,7 @@ async def addgentry(app, gid: int, conn = None, cur = None) -> None:
         f'''
         INSERT INTO guilds VALUES (
             {gid},
-            unixepoch('now'),
+            {tnow},
             NULL
         );
 
