@@ -239,7 +239,7 @@ class KiyokoSubredditManager:
     # 
     # Returns embed object, ready to be sent. If there is any error while building the embed, the function
     # returns None. The function will not throw any exceptions.
-    async def __fmtredditembed(self, subm: asyncpraw.reddit.models.Submission) -> discord.Embed | None:
+    async def __fmtredditembed(self, subm: asyncpraw.reddit.models.Submission) -> discord.Embed:
         embed: discord.Embed = None
         try:
             # Fetch author object.
