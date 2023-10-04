@@ -22,7 +22,7 @@ import src.error as kiyo_error
 # Sends a message securely, that is, without throwing a 404 if the app took too long to respond.
 #
 # Returns nothing.
-async def sendmsgsecure(inter: discord.Interaction | commands.Context, **kwargs) -> None:
+async def sendmsgsecure(inter, **kwargs) -> None:
     try:
         await (inter.response.send_message(**kwargs) if isinstance(inter, discord.Interaction) else inter.channel.send(**kwargs))
     except Exception as tmp_e:
@@ -207,7 +207,7 @@ def hascheck(cmd, check) -> bool:
 # owner.
 #
 # Returns True if yes, if not raises an MsgCmd_NotADeveloper exception.
-async def isadev(ctx: discord.Interaction | commands.Context) -> bool:
+async def isadev(ctx) -> bool:
     uid = ctx.author if isinstance(ctx, commands.Context) else ctx.user
     app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
     
@@ -226,7 +226,7 @@ async def isadev(ctx: discord.Interaction | commands.Context) -> bool:
 #
 # Returns True if the context is PM, otherwise it raises a MsgCmd_OnlyPMChannel
 # exception.
-def ispmcontext(ctx: discord.Interaction | commands.Context) -> bool:
+def ispmcontext(ctx) -> bool:
     if ctx.guild is not None:
         raise kiyo_error.MsgCmd_OnlyPMChannel
 
@@ -238,7 +238,7 @@ def ispmcontext(ctx: discord.Interaction | commands.Context) -> bool:
 #
 # Returns True if the command invoker is the owner of the app,
 # raises MissingPermissions if not.
-async def isappowner(ctx: discord.Interaction | commands.Context) -> bool:
+async def isappowner(ctx) -> bool:
     uid = ctx.author if isinstance(ctx, commands.Context) else ctx.user
     app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
 
@@ -255,7 +255,7 @@ async def isappowner(ctx: discord.Interaction | commands.Context) -> bool:
 #
 # Returns True if the command is enabled, or raises an exception if it
 # is not.
-def isenabled(ctx: discord.Interaction | commands.Context) -> bool:
+def isenabled(ctx) -> bool:
     cmd = ctx.command
     app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
     
@@ -271,7 +271,7 @@ def isenabled(ctx: discord.Interaction | commands.Context) -> bool:
 # the command. Hence, this check cannot fail.
 #
 # Returns True.
-def updcmdstats(ctx: discord.Interaction | commands.Context) -> bool:
+def updcmdstats(ctx) -> bool:
     cmd = ctx.command
     app = ctx.bot if isinstance(ctx, commands.Context) else ctx.client
 

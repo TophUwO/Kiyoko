@@ -236,7 +236,7 @@ class KiyokoCommandManager:
     # to the database, 'writestate()' must be called.
     #
     # Returns old command info, or None if the command did not exist.
-    def remcommand(self, cid: str) -> KiyokoCommandInfo | None:
+    def remcommand(self, cid: str) -> KiyokoCommandInfo:
         old = None
         try:
             self._cache[cid].delflag = True
@@ -253,7 +253,7 @@ class KiyokoCommandManager:
     #
     # Returns KiyokoCommandInfo object, or None if the command could
     # not be found.
-    def getcommandinfo(self, cid: str) -> KiyokoCommandInfo | None:
+    def getcommandinfo(self, cid: str) -> KiyokoCommandInfo:
         info = self._cache.get(cid, None)
         if info is None:
             return None
@@ -266,7 +266,7 @@ class KiyokoCommandManager:
     # nothing.
     #
     # Returns the old info, or None if the command is not registered.
-    def updcommandinfo(self, cid: str, **kwargs) -> KiyokoCommandInfo | None:
+    def updcommandinfo(self, cid: str, **kwargs) -> KiyokoCommandInfo:
         info = self._cache.get(cid, None)
         if info is None:
             return None

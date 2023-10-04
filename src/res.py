@@ -127,7 +127,7 @@ class KiyokoResourceManager(object):
     #
     # Returns old resource object. If the resource ID is not registered,
     # the function returns None.
-    def unregresource(self, rid: str) -> KiyokoResource | None:
+    def unregresource(self, rid: str) -> KiyokoResource:
         found = None
         
         try:
@@ -143,7 +143,7 @@ class KiyokoResourceManager(object):
     #
     # Returns old resource info. If the resource with the given ID is not registered,
     # the function returns None. The resource storage is not touched.
-    def updresource(self, rid: str, **kwargs) -> KiyokoResource | None:
+    def updresource(self, rid: str, **kwargs) -> KiyokoResource:
         # Update resource and return previous one.
         return self._res[rid].update(**kwargs) if self.getresource(rid) is not None else None
 
@@ -151,7 +151,7 @@ class KiyokoResourceManager(object):
     # Retrieves a resource with a given identifier.
     #
     # Returns resource object, or None if the resource could not be found.
-    def getresource(self, rid: str) -> KiyokoResource | None:
+    def getresource(self, rid: str) -> KiyokoResource:
         return self._res.get(rid, None)
 
 

@@ -34,6 +34,7 @@ class KiyokoApplication(commands.Bot):
         # Load global config.
         self.cfg   = kiyo_cfg.KiyokoGlobalConfig('conf/.env')
         self.stime = int(time.time())
+        self._lmod = False
 
         # Check for new version.
         self._nver = self.__getlatestversion()
@@ -72,7 +73,10 @@ class KiyokoApplication(commands.Bot):
         # Load guild configs.
         await self.gcman.loadgconfig()
         # Load modules.
-        await self.modman.loadmodules()
+        if not self._lmod:
+            await self.modman.loadmodules()
+            
+            self._lmod = True
 
         # Load global command info.
         await self.cmdman.readstate()

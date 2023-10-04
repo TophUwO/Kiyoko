@@ -135,8 +135,8 @@ gl_errordesc: dict[type, str] = {
 def cmderrembed(
     app,
     *,
-    inter: discord.Interaction | Context,
-    err: AppCommandError | CommandError
+    inter,
+    err
 ) -> tuple[discord.Embed, discord.File]:
     # Get thumbnail from local file.
     file = discord.File(app.resman.getresource('error').url, filename = 'error.png')

@@ -352,7 +352,7 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
     @commands.check(kiyo_utils.ispmcontext)
     @commands.check(kiyo_utils.isenabled)
     @commands.check(kiyo_utils.updcmdstats)
-    async def msgcmd_sync(self, ctx: commands.Context, guild: Optional[discord.Guild | str]) -> None:
+    async def msgcmd_sync(self, ctx: commands.Context, guild: Optional[discord.Guild]) -> None:
         # If 'guild' is a special key-word, get the developer guild of this application.
         if isinstance(guild, str) and guild.lower() in ['dev', 'debug', 'dbg', 'developer']:
             dgid = self._app.cfg.getvalue('global', 'devguild')
@@ -380,7 +380,7 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         embed = kiyo_utils.fmtembed(
             color  = 0x6495ED,
             title  = 'Command Tree Synchronization',
-            desc   = f'Successfully synchronized the command tree {appendix}.' +
+            desc   = f'Successfully synchronized the command tree {appendix}. ' +
                       'Note that it may take up to one your before '
                       'the new commands become available.',
             fields = [

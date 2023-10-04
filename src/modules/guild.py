@@ -33,9 +33,10 @@ SQL_NO_UPD = '0449feb0-5d19-4794-87dd7fd6d5e1e871'
 # data class holding guild-related configuration
 @dataclass
 class KiyokoGuildConfig:
-    gid:     int                                  # guild id
-    logchan: Optional[tuple[bool, int]]           # [enabled, channel_id]
-    reddit:  Optional[list[dict[str, str | int]]] # sub-reddit data
+    gid:      int                            # guild id
+    logchan:  Optional[tuple[bool, int]]     # [enabled, channel_id]
+    reddit:   Optional[list[dict[str, str]]] # sub-reddit data
+    logrules: Optional[dict[str, bool]]      # log rules
 
 
 # class for managing the guild config objects
@@ -50,7 +51,7 @@ class KiyokoGuildConfigManager(object):
     #
     # Returns guild settings object.
     def getgconfig(self, gid: int) -> KiyokoGuildConfig:
-        return self._dict.get(gid, KiyokoGuildConfig(gid, logchan = (False, 0), reddit = []))
+        return self._dict.get(gid, KiyokoGuildConfig(gid, logchan = (False, 0), reddit = [], logrules = {}))
 
 
     # Creates a generator that allows us to iterate over all currently available
@@ -86,7 +87,8 @@ class KiyokoGuildConfigManager(object):
             self._dict[gid] = KiyokoGuildConfig(
                 gid,
                 json_obj.get('logchan', None),
-                json_obj.get('reddit', None)
+                json_obj.get('reddit', None),
+                json_obj.get('logrules', {})
             )
     
         # Clean up.
@@ -363,26 +365,25 @@ async def syncdb(app) -> None:
 
     # Update entries in database according to the generated 'command list'.
     for gid, action in clist:
-        match action:
-            case 1:
-                # Case (1): INSERT guild info.
-                await addgentry(app, gid, conn, cur)
-            case 2 | 3:
-                # Case (2) or (3): UPDATE guild info.
-                #
-                # Notes:
-                #     (i) Because we do not know for certain WHEN the app left the guild,
-                #         we use the current time as the time of leaving.
-                tnow = int(time.time())
-                jval = tnow if action == 3 else SQL_NO_UPD
-                lval = tnow if action == 2 else None
-                await updgentry(
-                    app,
-                    gid,
-                    [('joined', jval), ('left', lval)],
-                    conn,
-                    cur
-                )
+        if action == 1:
+            # Case (1): INSERT guild info.
+            await addgentry(app, gid, conn, cur)
+        elif action in [2, 3]:
+            # Case (2) or (3): UPDATE guild info.
+            #
+            # Notes:
+            #     (i) Because we do not know for certain WHEN the app left the guild,
+            #         we use the current time as the time of leaving.
+            tnow = int(time.time())
+            jval = tnow if action == 3 else SQL_NO_UPD
+            lval = tnow if action == 2 else None
+            await updgentry(
+                app,
+                gid,
+                [('joined', jval), ('left', lval)],
+                conn,
+                cur
+            )
 
     # Flush db and clean up.
     await cur.close()

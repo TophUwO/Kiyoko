@@ -87,21 +87,20 @@ class KiyokoModule_Help(kiyo_mod.KiyokoModule_Base):
         infolist = [(x, self._app.cmdman.getcommandinfo(x)) for x in input]
         
         # Sort list.
-        match crit:
-            case 1:
-                # Variant 1: Sort alphabetically.
-                infolist.sort(key = lambda _, info: info.cmdname)
-            case 2:
-                # Variant 2: Sort by significance. reverse = True because
-                # we want to see most-used commands first.
-                infolist.sort(key = lambda _, info: info.count, reverse = True)
-            case 3:
-                # Variant 3: Sort by parameter count.
-                infolist.sort(key = lambda cmd, _: kiyo_utils.numcmdargs(cmd))
-            case 4:
-                # Variant 4: Sort by time of existence. reverse = True because
-                # we want to see newest commands first.
-                infolist.sort(key = lambda _, info: info.added, reverse = True)
+        if crit == 1:
+            # Variant 1: Sort alphabetically.
+            infolist.sort(key = lambda _, info: info.cmdname)
+        elif crit == 2:
+            # Variant 2: Sort by significance. reverse = True because
+            # we want to see most-used commands first.
+            infolist.sort(key = lambda _, info: info.count, reverse = True)
+        elif crit == 3:
+            # Variant 3: Sort by parameter count.
+            infolist.sort(key = lambda cmd, _: kiyo_utils.numcmdargs(cmd))
+        elif crit == 4:
+            # Variant 4: Sort by time of existence. reverse = True because
+            # we want to see newest commands first.
+            infolist.sort(key = lambda _, info: info.added, reverse = True)
 
         # Return only the commands.
         return [x for (x, _) in infolist]
