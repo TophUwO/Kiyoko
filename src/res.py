@@ -10,7 +10,7 @@
 # imports
 import enum, json, easy_pil
 
-from typing      import Optional, Self
+from typing      import Optional
 from loguru      import logger
 from dataclasses import *
 
@@ -32,7 +32,7 @@ class KiyokoResource:
     # Updates a resource. Only updates the fields that are given.
     #
     # Returns nothing.
-    def update(self, **kwargs) -> Self:
+    def update(self, **kwargs):
         # Save current state.
         old = replace(self)
 
