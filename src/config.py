@@ -13,7 +13,6 @@ import configparser, asyncio
 
 from dataclasses import dataclass
 from loguru      import logger
-from typing      import Self
 
 import discord.ext.tasks as tasks
 
@@ -191,7 +190,7 @@ class KiyokoCommandInfo:
     # cmdname, added cannot be updated.
     #
     # Returns the old info.
-    def update(self, **kwargs) -> Self:
+    def update(self, **kwargs):
         old = dataclasses.replace(self)
 
         self.enabled = kwargs.get('enabled', self.enabled)
