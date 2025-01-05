@@ -239,7 +239,9 @@ async def remgentries(app, gids: list[int], conn = None, cur = None) -> None:
     await cur.executescript(
         f'''
         DELETE FROM guilds        WHERE id      IN ({sres});
-        DELETE FROM guildsettings WHERE guildid IN ({sres})
+        DELETE FROM guildsettings WHERE guildid IN ({sres});
+        DELETE FROM strike_entr   WHERE guildid IN ({sres});
+        DELETE FROM strike_cfg    WHERE guildid IN ({sres})
         '''
     )
 

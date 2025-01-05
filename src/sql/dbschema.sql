@@ -3,13 +3,15 @@
 # Kiyoko - a multi-purpose discord application for moderation, #
 #          server automatization, and community engagement     #
 #                                                              #
-# (c) 2023 TophUwO All rights reserved.                        #
+# (c) 2023-2025 TophUwO All rights reserved.                   #
 ################################################################
 */
 
 
 -- Force UTF-8 encoding.
-PRAGMA encoding = 'UTF-8';
+PRAGMA encoding     = 'UTF-8';
+PRAGMA foreign_keys = OFF;
+PRAGMA user_version = 2;
 
 
 -- Create 'guilds' table, holding general data regarding
@@ -49,5 +51,32 @@ CREATE TABLE commandinfo (
         cmdname
     )
 );
+
+
+-- Create table 'strike_entr', holding strikes for all users per guild
+CREATE TABLE strike_entr (
+    guildid INTEGER NOT NULL, -- ID of the guild in which the strike was recorded
+    uid     INTEGER NOT NULL, -- user who was striked
+    sid     INTEGER NOT NULL, -- ID of the mod who striked the user identified by uid
+    id      TEXT    NOT NULL, -- ID of the strike itself
+    reason  TEXT    NOT NULL, -- reason for the strike
+    pt      INTEGER NOT NULL, -- points added for this strike
+    ts      INTEGER NOT NULL, -- timestamp of when the strike was added
+    msgref  TEXT,             -- (optional) message reference for proof
+
+    UNIQUE (guildid, uid, id)
+);
+
+
+-- Create table 'strike_cfg', holding the per-guild config for the strike system
+CREATE TABLE strike_cfg (
+    guildid INTEGER NOT NULL, -- ID of the guild for which this entry is valid
+    key     TEXT    NOT NULL, -- name of the setting
+    p1      TEXT,             -- first param, meaning defined by key
+    p2      TEXT              -- second param, meaning defined by key
+);
+
+
+PRAGMA foreign_keys = ON;
 
 

@@ -125,7 +125,7 @@ def cfgupdembed(*, inter: discord.Interaction, desc: str, upd: list[tuple[str, a
 
     # Prepare and send embed.
     return (fmtembed(
-        color  = 0x28AEFF,
+        color  = 0x95a5a6,
         title  = 'Guild Configuration Update',
         desc   = f'Updated guild settings for ``{desc}``. Please note that some settings may take some time'
                   ' (i.e. until the next update of the module that uses the setting) until the changes take effect.' + appendix,
@@ -141,7 +141,7 @@ def cfgupdembed(*, inter: discord.Interaction, desc: str, upd: list[tuple[str, a
 def fmtcfgviewembed(*, inter: discord.Interaction, desc: str) -> tuple[discord.Embed, discord.File]:
     file = discord.File(inter.client.resman.getresource('settings').url, filename = 'settings.png')
     return (fmtembed(
-        color  = 0x28AEFF,
+        color  = 0x95a5a6,
         title  = 'Guild Configuration',
         desc   = desc,
         fields = None,

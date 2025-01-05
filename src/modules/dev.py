@@ -378,11 +378,12 @@ class KiyokoModule_Dev(kiyo_mod.KiyokoModule_Base):
         # Send confirmation message.
         file = discord.File(self._app.resman.getresource('sync').url, filename = 'sync.png')
         embed = kiyo_utils.fmtembed(
-            color  = 0x6495ED,
+            color  = 0x3498db,
             title  = 'Command Tree Synchronization',
             desc   = f'Successfully synchronized the command tree {appendix}. ' +
-                      'Note that it may take up to one your before '
-                      'the new commands become available.',
+                      'Note that it **may take up to one hour** before '
+                      'the new commands become available. This will be much faster if '
+                      'only synching to a specific guild.',
             fields = [
                 ('Type', 'local' if ispriv == True else 'global', True),
                 ('Count', f'{kiyo_utils.nappcmds(self._app)}', True)

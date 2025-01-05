@@ -9,7 +9,10 @@
 
 # imports
 import discord
+import json
 
+import jsonschema
+import jsonschema.exceptions
 from loguru               import logger
 from discord.app_commands import *
 from discord.ext.commands import *
@@ -45,6 +48,15 @@ class AppCmd_NotFound(CheckFailure):
 # This exception is thrown whenever an application command is added to the tree
 # but is still not implemented.
 class AppCmd_NotImplemented(CheckFailure):
+    pass
+
+# This exception is thrown when the module configuration is not complete.
+class AppCmd_IncompleteConfig(CheckFailure):
+    pass
+
+# This exception is thrown when ther caller does not have sufficient permissions to invoke
+# the command.
+class AppCmd_MissingPermissions(CheckFailure):
     pass
 
 
@@ -94,36 +106,46 @@ class MsgCmd_CommandDisabled(discord.app_commands.AppCommandError):
 # Error code dictionary, mapping error codes to a string that will
 # be displayed to the user.
 gl_errordesc: dict[type, str] = {
+    # raw exceptions
+    discord.HTTPException:                 'Could not download the attachment.',
+    discord.Forbidden:                     'You do not have permissions to access this attachment.',
+    discord.NotFound:                      'The attachment was deleted.',
+    json.JSONDecodeError:                  'Could not decode the JSON document. It is likely malformed.',
+    jsonschema.exceptions.SchemaError:     'Could not load JSON schema for validation: Schema is likely malformed or could not be found.',
+    jsonschema.exceptions.ValidationError: 'Could not validate JSON against schema. JSON document is likely malformed.',
+
     # application command errors
-    NoPrivateMessage:                 'This command can only be executed in a guild context.',
-    MissingRole:                      'You lack a role to execute this command.',
-    MissingPermissions:               'You require higher permissions in order to execute this command.',
-    BotMissingPermissions:            'The application does not have the required permissions.',
-    CommandOnCooldown:                'The command is on cooldown.',
-    CommandSignatureMismatch:         'Command signatures are incongruent; this is likely because '
-                                      'of a command update without a sync. Contact the owner of the application.',
-    AppCmd_InvalidParameter:          'A command parameter is invalid.',
-    AppCmd_MissingChannelPermissions: 'The application is missing channel permissions.',
-    AppCmd_NotApplicationOwner:       'This command can only be invoked by the owner of this application.',
-    AppCmd_AllSlotsOccupied:          'All slots are currently occupied.',
-    AppCmd_NotFound:                  'This application command could not be found. It\'s likely it got removed. '
-                                      'Please contact the owner of the application.',
-    AppCmd_NotImplemented:            'This command has yet to be implemented.',
+    NoPrivateMessage:                      'This command can only be executed in a guild context.',
+    MissingRole:                           'You lack a role to execute this command.',
+    MissingPermissions:                    'You require higher permissions in order to execute this command.',
+    BotMissingPermissions:                 'The application does not have the required permissions.',
+    CommandOnCooldown:                     'The command is on cooldown.',
+    CommandSignatureMismatch:              'Command signatures are incongruent; this is likely because '
+                                           'of a command update without a sync. Contact the owner of the application.',
+    AppCmd_InvalidParameter:               'A command parameter is invalid.',
+    AppCmd_MissingChannelPermissions:      'The application is missing channel permissions.',
+    AppCmd_NotApplicationOwner:            'This command can only be invoked by the owner of this application.',
+    AppCmd_AllSlotsOccupied:               'All slots are currently occupied.',
+    AppCmd_NotFound:                       'This application command could not be found. It\'s likely it got removed. '
+                                           'Please contact the owner of the application.',
+    AppCmd_NotImplemented:                 'This command has yet to be implemented.',
+    AppCmd_IncompleteConfig:               'The parent module\'s configuration for this command is incomplete.',
+    AppCmd_MissingPermissions:             'You require higher permissions in order to execute this command.',
 
     # message command errors
-    CommandInvokeError:               'Could not successfully complete command callback. This is likely a bug in the callback\'s code '
-                                      'and should be fixed by the maintainer of this application.',
-    NotOwner:                         'This command can only be invoked by the owner of the application.',
-    BadArgument:                      'Could not convert message command parameter.',
-    MissingRequiredArgument:          'The command invokation context is missing a required parameter.',
-    MsgCmd_NotADeveloper:             'This command can only be invoked by the owner of this application or a registered developer.',
-    MsgCmd_OnlyPMChannel:             'This message command can only be invoked from a PM channel.',
-    MsgCmd_NoDev:                     'The user with the given ID is not registered as a developer.',
-    MsgCmd_NoSuchUser:                'A user with the given ID does not exist.',
-    MsgCmd_AlreadyDev:                'The user with the given ID is already registered as a developer.',
-    MsgCmd_InvalidSubCommand:         'Tried to invoke a sub-command that does not exist.',
-    MsgCmd_InvalidConfiguration:      'Could not invoke command due to invalid configuration.',
-    MsgCmd_CommandDisabled:           'The command or sub-command that was being invoked is globally disabled.'
+    CommandInvokeError:                    'Could not successfully complete command callback. This is likely a bug in the callback\'s code '
+                                           'and should be fixed by the maintainer of this application.',
+    NotOwner:                              'This command can only be invoked by the owner of the application.',
+    BadArgument:                           'Could not convert message command parameter.',
+    MissingRequiredArgument:               'The command invokation context is missing a required parameter.',
+    MsgCmd_NotADeveloper:                  'This command can only be invoked by the owner of this application or a registered developer.',
+    MsgCmd_OnlyPMChannel:                  'This message command can only be invoked from a PM channel.',
+    MsgCmd_NoDev:                          'The user with the given ID is not registered as a developer.',
+    MsgCmd_NoSuchUser:                     'A user with the given ID does not exist.',
+    MsgCmd_AlreadyDev:                     'The user with the given ID is already registered as a developer.',
+    MsgCmd_InvalidSubCommand:              'Tried to invoke a sub-command that does not exist.',
+    MsgCmd_InvalidConfiguration:           'Could not invoke command due to invalid configuration.',
+    MsgCmd_CommandDisabled:                'The command or sub-command that was being invoked is globally disabled.'
 }
 
 

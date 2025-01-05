@@ -1,0 +1,39 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "decay": {
+            "type": "string",
+            "pattern": "^([0-9]+[ymwd])+$",
+            "description": "A string representing decay time, e.g., '12y3m3w', '1h'."
+        },
+        "thresholds": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "pt": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "A positive integer representing the point threshold."
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": [ "warn", "timeout", "kick", "ban" ],
+                        "description": "The action to take at this threshold."
+                    },
+                    "extra": {
+                        "type": [ "string", "null" ],
+                        "pattern": "^([0-9]+[ymwdh])+$",
+                        "description": "Additional action detail (e.g., duration) or null.",
+                        "nullable": true
+                    }
+                },
+                "required": [ "pt", "action", "extra" ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [ "decay", "thresholds" ],
+    "additionalProperties": false
+}
