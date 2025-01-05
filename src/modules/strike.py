@@ -389,7 +389,7 @@ class KiyokoCommandGroup_Strike(discord.app_commands.Group):
             s = inter.client.get_user(int(entry[2]))
             body += f'**Strike** (ID: ``{entry[3]}``) - ``{int(entry[5])}`` points\n'
 
-            body += f'- **Date**: {datetime.datetime.fromtimestamp(float(entry[6])).strftime("%c")}\n'
+            body += f'- **Date**: {datetime.datetime.fromtimestamp(float(entry[6])).strftime("%A %d, %Y - %r")}\n'
             if elevated:
                 body += f'- **Issuer**: ``{s.display_name if s is not None else "n/a"}`` (ID: ``{s.id}``)\n'
             body += f'- **Reason**: {entry[4]}\n'
@@ -444,9 +444,9 @@ class KiyokoCommandGroup_Strike(discord.app_commands.Group):
 
         e = discord.Embed(
             color = 0xf1c40f,
-            title = f'You have been {a} on ``{g.name}``',
+            title = f'You have been {a} ``{g.name}``',
             description = 
-                  f'For a recent infraction, you have been {a} on ``{g.name}``. For more information and context, refer to'
+                  f'For a recent infraction, you have been {a} ``{g.name}``. For more information and context, refer to'
                 + ' the fields below or contact the staff team. '
                 + (f'Please note that future infractions may result in more stringent sanctions. ' if a != 'banned from' else '')
                 + f'Your current point count is ``{ptc}``.'
