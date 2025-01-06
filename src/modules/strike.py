@@ -246,7 +246,7 @@ class KiyokoCommandGroup_Strike(discord.app_commands.Group):
                     raise kiyo_error.AppCmd_MissingPermissions
 
             # Send feedback to caller.
-            embed, file = self.__makefeedbackembed(uid, inter.user, sid, reason, pt, res[0], msgref)
+            embed, file = self.__makefeedbackembed(inter.user, uid, sid, reason, pt, res[0], msgref)
             await kiyo_utils.sendmsgsecure(inter, embed = embed, file = file)
 
         # Clean up the mess.
