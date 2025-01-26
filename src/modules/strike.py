@@ -236,7 +236,7 @@ class KiyokoCommandGroup_Strike(discord.app_commands.Group):
                     raise kiyo_error.AppCmd_MissingPermissions
             elif command[0] == 'ban':
                 # Check if the caller can ban members.
-                if not uid.resolved_permissions.ban_members:
+                if not inter.user.resolved_permissions.ban_members:
                     raise kiyo_error.AppCmd_MissingPermissions
 
                 # At last, if this damn person cannot keep it together, we ban them.
